@@ -44,7 +44,8 @@ jobs:
           --health-retries 5
     env:
       DATABASE_URL: postgresql://kempo:kempo@localhost:5432/kempo_payments_test
-      SETTINGS_ENCRYPTION_KEY: 0000000000000000000000000000000000000000000000000000000000000000
+      # Quoted: unquoted, YAML reads 64 zeros as the number 0 and the key is invalid.
+      SETTINGS_ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
     steps:
       - uses: actions/checkout@v4
         with:

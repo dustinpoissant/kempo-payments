@@ -36,7 +36,7 @@ jobs:
       DATABASE_URL: postgresql://kempo:kempo@localhost:5432/kempo_payments_test
       # Not a real key anywhere — the secret-settings suite needs *a* valid one to prove a
       # credential round-trips through encryption, and generating it here keeps it out of the repo.
-      SETTINGS_ENCRYPTION_KEY: 0000000000000000000000000000000000000000000000000000000000000000
+      SETTINGS_ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
     steps:
       - uses: actions/checkout@v4
 
@@ -83,7 +83,7 @@ jobs:
           --health-retries 5
     env:
       DATABASE_URL: postgresql://kempo:kempo@localhost:5432/kempo_payments_test
-      SETTINGS_ENCRYPTION_KEY: 0000000000000000000000000000000000000000000000000000000000000000
+      SETTINGS_ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
     steps:
       - uses: actions/checkout@v4
         with:
