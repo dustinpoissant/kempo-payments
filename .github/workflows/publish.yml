@@ -1,4 +1,4 @@
-name: Test (npm publishing disabled)
+name: Test and version bump (npm publish disabled)
 
 on:
   push:
@@ -18,10 +18,10 @@ on:
 
 jobs:
   publish:
-    # Restore this when publishing is re-enabled. [skip publish] lands a commit on master without
-    # releasing while still running the tests, which a shared [skip ci] marker cannot do since that
-    # skips the test workflow too. A manual run always publishes.
-    # if: "github.event_name == 'workflow_dispatch' || !(contains(github.event.head_commit.message, '[skip ci]') || contains(github.event.head_commit.message, '[skip publish]'))"
+    # [skip publish] lands a commit on master without releasing (no version bump) while still
+    # running the tests, which a shared [skip ci] marker cannot do since that skips the test
+    # workflow too. A manual run always releases.
+    if: "github.event_name == 'workflow_dispatch' || !(contains(github.event.head_commit.message, '[skip ci]') || contains(github.event.head_commit.message, '[skip publish]'))"
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -78,31 +78,31 @@ jobs:
       - name: Run Unit Tests
         run: npm test
 
-      # Publishing is switched off until the package exists on npm and trusted publishing is set up
-      # for it (npmjs.com -> the package -> Settings -> Trusted Publisher -> this repo and workflow
-      # file). To turn it back on: uncomment the steps below, restore the job-level `if:` at the top,
-      # and rename the workflow to "Publish to npmjs".
-      #
-      # - name: Set version type
-      #   id: version
-      #   run: |
-      #     if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-      #       echo "type=${{ inputs.version-type }}" >> $GITHUB_OUTPUT
-      #     else
-      #       echo "type=patch" >> $GITHUB_OUTPUT
-      #     fi
-      #
-      # - name: Bump ${{ steps.version.outputs.type }} version
-      #   run: |
-      #     git config --global user.name "github-actions"
-      #     git config --global user.email "github-actions@github.com"
-      #     npm version ${{ steps.version.outputs.type }} --no-git-tag-version
-      #     git add -A || true
-      #     git commit -m "ci: bump ${{ steps.version.outputs.type }} version [skip ci]" || echo "No changes to commit"
-      #     # Must be the branch that triggered this run — hardcoding a branch name silently drifts
-      #     # git and npm apart the day the default branch changes.
-      #     git push origin HEAD:${{ github.ref_name }}
-      #   env:
-      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set version type
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "type=${{ inputs.version-type }}" >> $GITHUB_OUTPUT
+          else
+            echo "type=patch" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Bump ${{ steps.version.outputs.type }} version
+        run: |
+          git config --global user.name "github-actions"
+          git config --global user.email "github-actions@github.com"
+          npm version ${{ steps.version.outputs.type }} --no-git-tag-version
+          git add -A || true
+          git commit -m "ci: bump ${{ steps.version.outputs.type }} version [skip ci]" || echo "No changes to commit"
+          # Must be the branch that triggered this run — hardcoding a branch name silently drifts
+          # git and npm apart the day the default branch changes.
+          git push origin HEAD:${{ github.ref_name }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Publishing to npm is switched off until the package exists there and trusted publishing is
+      # set up for it (npmjs.com -> the package -> Settings -> Trusted Publisher -> this repo and
+      # workflow file). To turn it on: uncomment the step below and rename the workflow to
+      # "Publish to npmjs". Until then versions are bumped on master but nothing is released.
       #
       # - run: npm publish --access public
