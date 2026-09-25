@@ -1,0 +1,73 @@
+{
+  "docs": "https://github.com/dustinpoissant/kempo-payments#readme",
+  "git": "https://github.com/dustinpoissant/kempo-payments",
+  "public-scope": "payments",
+  "schema": "./server/db/schema.js",
+  "permissions": [
+    { "name": "payments:view", "description": "See payments, what they were for, and what happened to them" },
+    { "name": "payments:create", "description": "Take a payment — start a new charge over the API" },
+    { "name": "payments:capture", "description": "Capture or cancel a payment that was only authorised" },
+    { "name": "payments:refund", "description": "Refund a payment, in full or in part" },
+    { "name": "payments:settings", "description": "Change the payment provider and its API credentials" }
+  ],
+  "settings": [
+    {
+      "name": "provider",
+      "value": "stripe",
+      "type": "string",
+      "description": "Which payment processor money actually goes through. Only 'stripe' ships today"
+    },
+    {
+      "name": "currency",
+      "value": "usd",
+      "type": "string",
+      "description": "The currency a payment is taken in when the caller does not name one. ISO 4217, lowercase"
+    },
+    {
+      "name": "capture_method",
+      "value": "automatic",
+      "type": "string",
+      "description": "'automatic' charges the card as soon as the customer confirms. 'manual' only authorises it, and somebody has to capture it before the hold expires"
+    },
+    {
+      "name": "stripe_publishable_key",
+      "value": "",
+      "type": "string",
+      "description": "Stripe publishable key (pk_test_… or pk_live_…). This one is meant to be seen — it is what the payment form in the browser is built with"
+    },
+    {
+      "name": "stripe_secret_key",
+      "value": "",
+      "type": "secret",
+      "description": "Stripe secret key (sk_test_… or sk_live_…). Encrypted at rest and never sent to a browser"
+    },
+    {
+      "name": "stripe_webhook_secret",
+      "value": "",
+      "type": "secret",
+      "description": "Stripe webhook signing secret (whsec_…). Without it every webhook is rejected, and no payment is ever confirmed"
+    }
+  ],
+  "groups": [
+    {
+      "name": "kempo-payments:operator",
+      "description": "Handles payments day to day — looks them up, captures authorisations and issues refunds — without being able to see or change the API credentials",
+      "permissions": [
+        "payments:view",
+        "payments:capture",
+        "payments:refund"
+      ]
+    },
+    {
+      "name": "kempo-payments:administrator",
+      "description": "Everything an operator can do, plus connecting the site to a payment processor",
+      "permissions": [
+        "payments:view",
+        "payments:create",
+        "payments:capture",
+        "payments:refund",
+        "payments:settings"
+      ]
+    }
+  ]
+}

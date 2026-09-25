@@ -1,0 +1,46 @@
+{
+  "name": "kempo-payments",
+  "version": "0.1.0",
+  "description": "Payment processing for kempo — provider-agnostic payment intents, capture and refunds, with Stripe built in",
+  "license": "MIT",
+  "author": "Dustin Poissant",
+  "type": "module",
+  "main": "sdk.js",
+  "scripts": {
+    "test": "kempo-test -l minimal",
+    "link:local": "npm install ../kempo ../kempo-server ../kempo-ui --no-save --no-legacy-peer-deps --force"
+  },
+  "kempo": {
+    "public-scope": "payments"
+  },
+  "exports": {
+    "./install": "./install.js",
+    "./update": "./update.js",
+    "./uninstall": "./uninstall.js",
+    "./sdk": "./sdk.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dustinpoissant/kempo-payments.git"
+  },
+  "dependencies": {
+    "drizzle-orm": "^0.45.2",
+    "stripe": "^22.5.0"
+  },
+  "peerDependencies": {
+    "kempo": ">=4.2.40",
+    "kempo-server": ">=3.3.0",
+    "kempo-ui": ">=0.4.53"
+  },
+  "devDependencies": {
+    "drizzle-kit": "^0.31.10",
+    "kempo-testing-framework": "^1.4.11",
+    "postgres": "^3.4.9"
+  },
+  "allowScripts": {
+    "esbuild@0.18.20": true,
+    "esbuild@0.25.12": true,
+    "esbuild@0.28.2": true,
+    "puppeteer@25.7.0": true
+  }
+}

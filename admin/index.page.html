@@ -1,0 +1,81 @@
+<!--
+locked: true
+-->
+<page title="Payments - Admin">
+<content>
+  <script type="module" src="/kempo/components/PermissionTarget.js"></script>
+  <script type="module" src="/kempo-ui/components/Tabs.js"></script>
+  <script type="module" src="/admin/extension/kempo-payments/components/PaymentList.js"></script>
+  <script type="module" src="/admin/extension/kempo-payments/components/ProviderSettings.js"></script>
+  <script type="module" src="/admin/extension/kempo-payments/components/TestPayment.js"></script>
+
+  <div>
+    <h1>Payments</h1>
+    <p class="tc-muted">
+      Every charge this site has taken, and the connection to the processor that takes them. Nothing
+      here holds a card number — those go from the customer's browser straight to the processor, and
+      what is kept is this site's record of what happened to the money.
+    </p>
+
+    <k-tabs id="tabs" active="payments" persistent-id="kempo-payments-admin-tab">
+      <k-tab id="paymentsTab" for="payments">Payments</k-tab>
+      <k-tab id="testTab" for="test">Take a payment</k-tab>
+      <k-tab id="settingsTab" for="settings">Settings</k-tab>
+
+      <k-tab-content id="paymentsContent" name="payments">
+        <k-pay-list></k-pay-list>
+      </k-tab-content>
+
+      <k-tab-content id="testContent" name="test">
+        <k-pay-test></k-pay-test>
+      </k-tab-content>
+
+      <k-tab-content id="settingsContent" name="settings">
+        <k-pay-settings></k-pay-settings>
+      </k-tab-content>
+    </k-tabs>
+
+    <!--
+      Neither of these can wrap the <k-tab>/<k-tab-content> pairs the way k-permission normally
+      wraps content: k-tabs finds its tabs with a direct-child query, so any element between
+      <k-tabs> and <k-tab> — including a hidden one — breaks tab selection outright, not just the
+      display. k-permission-target instead reaches in by id and hides the tab and its pane in place,
+      leaving both exactly where <k-tabs> expects to find them.
+
+      This is a courtesy, same as everywhere else in this file: the actual boundary is server-side,
+      on each route.
+    -->
+    <k-permission-target has="payments:view" target="#paymentsTab, #paymentsContent"></k-permission-target>
+    <k-permission-target has="payments:create" target="#testTab, #testContent"></k-permission-target>
+    <k-permission-target has="payments:settings" target="#settingsTab, #settingsContent"></k-permission-target>
+  </div>
+
+  <script type="module">
+    import { getAllCurrentUserPermissions } from '/kempo/sdk.js';
+
+    await customElements.whenDefined('k-tabs');
+
+    /*
+      The markup defaults to the Payments tab, and persistent-id can restore whichever tab a
+      returning visitor left open — including one this particular visitor cannot see, if their
+      permissions changed since. The k-permission-target elements above hide a tab's own button and
+      pane; this handles never leaving a hidden one selected.
+    */
+    const [error, data] = await getAllCurrentUserPermissions();
+    const permissions = new Set(error ? [] : (data?.permissions || []));
+
+    const tabs = document.getElementById('tabs');
+    if(tabs){
+      const visibility = {
+        payments: permissions.has('payments:view'),
+        test: permissions.has('payments:create'),
+        settings: permissions.has('payments:settings'),
+      };
+      if(!visibility[tabs.active]){
+        const fallback = Object.keys(visibility).find(name => visibility[name]);
+        if(fallback) tabs.active = fallback;
+      }
+    }
+  </script>
+</content>
+</page>

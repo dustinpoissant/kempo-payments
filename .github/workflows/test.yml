@@ -1,0 +1,130 @@
+name: Run Unit Tests
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+
+jobs:
+  # kempo/kempo-ui/kempo-server resolve from the registry, which is what a site installing this
+  # extension actually gets.
+  published:
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+    runs-on: ubuntu-latest
+    services:
+      # The data-layer suite needs a real database; it skips itself when none is reachable, so this
+      # is what makes it actually run rather than silently pass.
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: kempo
+          POSTGRES_PASSWORD: kempo
+          POSTGRES_DB: kempo_payments_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://kempo:kempo@localhost:5432/kempo_payments_test
+      # Not a real key anywhere — the secret-settings suite needs *a* valid one to prove a
+      # credential round-trips through encryption, and generating it here keeps it out of the repo.
+      SETTINGS_ENCRYPTION_KEY: 0000000000000000000000000000000000000000000000000000000000000000
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+
+      - run: npm ci
+
+      # kempo/kempo-ui/kempo-server are peer dependencies, which npm ci does not install.
+      # legacy-peer-deps (set repo-wide in .npmrc, needed so npm ci doesn't ERESOLVE on the two
+      # peer paths to kempo-server) also makes a bare `npm install <peer-name>` silently no-op
+      # instead of actually placing the package. --no-legacy-peer-deps forces a real install;
+      # --force is needed alongside it to get past that same ERESOLVE conflict.
+      - name: Install the host for the test gate
+        run: npm install --no-save --no-legacy-peer-deps --force kempo@latest kempo-ui@latest kempo-server@latest
+
+      - name: Apply database schema
+        run: npx drizzle-kit push --force
+
+      - name: Run Unit Tests
+        run: npm test
+
+  # The same suite against sibling checkouts of the host. This extension resolves imports out of
+  # kempo, so it breaks whenever kempo moves something it reaches into — this job is what surfaces
+  # that before a release, and it is advisory rather than blocking.
+  siblings:
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: kempo
+          POSTGRES_PASSWORD: kempo
+          POSTGRES_DB: kempo_payments_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://kempo:kempo@localhost:5432/kempo_payments_test
+      SETTINGS_ENCRYPTION_KEY: 0000000000000000000000000000000000000000000000000000000000000000
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: kempo-payments
+
+      - uses: actions/checkout@v4
+        with:
+          repository: dustinpoissant/kempo
+          path: kempo
+
+      - uses: actions/checkout@v4
+        with:
+          repository: dustinpoissant/kempo-server
+          path: kempo-server
+
+      # kempo's own link:local script links kempo-server and kempo-ui as siblings, so this checkout
+      # has to exist even though nothing here imports kempo-ui server-side.
+      - uses: actions/checkout@v4
+        with:
+          repository: dustinpoissant/kempo-ui
+          path: kempo-ui
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+
+      - name: Install host
+        run: npm ci && npm run link:local
+        working-directory: kempo
+
+      - run: npm ci
+        working-directory: kempo-payments
+
+      - name: Link sibling checkouts
+        run: npm run link:local
+        working-directory: kempo-payments
+
+      - name: Apply database schema
+        run: npx drizzle-kit push --force
+        working-directory: kempo-payments
+
+      - name: Run Unit Tests
+        run: npm test
+        working-directory: kempo-payments
