@@ -1,6 +1,6 @@
 {
   "name": "kempo-payments",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Payment processing for kempo — provider-agnostic payment intents, capture and refunds, with Stripe built in",
   "license": "MIT",
   "author": "Dustin Poissant",
