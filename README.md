@@ -37,10 +37,6 @@ webhook — see [Hooks](#hooks-it-fires) for why that distinction is the whole d
 
 ## Install
 
-> **Not on npm yet.** Until it is published, install from GitHub:
-> `npm install github:dustinpoissant/kempo-payments`, or clone it next to your site and use
-> `file:../kempo-payments`.
-
 ```bash
 npm install kempo-payments
 ```

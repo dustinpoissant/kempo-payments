@@ -19,6 +19,16 @@
     "./uninstall": "./uninstall.js",
     "./sdk": "./sdk.js"
   },
+  "files": [
+    "admin",
+    "public",
+    "server",
+    "install.js",
+    "update.js",
+    "uninstall.js",
+    "sdk.js",
+    "kempo-config.json"
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dustinpoissant/kempo-payments.git"
