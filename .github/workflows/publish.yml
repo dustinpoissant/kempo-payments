@@ -1,4 +1,4 @@
-name: Test and version bump (npm publish disabled)
+name: Publish to npmjs
 
 on:
   push:
@@ -100,9 +100,4 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # Publishing to npm is switched off until the package exists there and trusted publishing is
-      # set up for it (npmjs.com -> the package -> Settings -> Trusted Publisher -> this repo and
-      # workflow file). To turn it on: uncomment the step below and rename the workflow to
-      # "Publish to npmjs". Until then versions are bumped on master but nothing is released.
-      #
-      # - run: npm publish --access public
+      - run: npm publish --access public
