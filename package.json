@@ -7,7 +7,8 @@
   "type": "module",
   "main": "sdk.js",
   "scripts": {
-    "test": "kempo-test -l minimal",
+    "test": "node scripts/run-tests.js unit kempo-test -l minimal",
+    "test:integration": "node scripts/run-tests.js integration kempo-test -l minimal",
     "link:local": "npm install ../kempo ../kempo-server ../kempo-ui --no-save --no-legacy-peer-deps --force"
   },
   "kempo": {
@@ -43,6 +44,7 @@
     "kempo-ui": ">=0.4.53"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.9",
     "drizzle-kit": "^0.31.10",
     "kempo-testing-framework": "^1.4.11",
     "postgres": "^3.4.9"

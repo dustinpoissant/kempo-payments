@@ -20,9 +20,16 @@ const name = (() => {
   }
 })();
 
-export const isTestDatabase = name.endsWith('_test');
+/*
+  The unit tier (KEMPO_DB=pglite) is an in-memory database and always a throwaway.
+*/
+export const isTestDatabase = process.env.KEMPO_DB === 'pglite' || name.endsWith('_test');
 
 export const databaseReachable = isTestDatabase && await db.execute(sql`select 1`).then(() => true).catch(() => false);
+
+if(!databaseReachable && process.env.KEMPO_TEST_TIER === 'integration'){
+  throw new Error('The integration tier needs DATABASE_URL pointing at a throwaway Postgres named *_test with the schema applied (npx drizzle-kit push --force).');
+}
 
 export const skipReason = isTestDatabase
   ? 'no database reachable'
