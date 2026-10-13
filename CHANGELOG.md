@@ -6,6 +6,7 @@ All notable changes to `kempo-payments` are documented in this file.
 
 ### Added
 
+- **Dashboard widget.** A **Payments** widget on the kempo admin dashboard showing money captured and refunded per currency, the payment count and any disputes, with a **View payments** button, declared in `widgets` in `kempo-config.json`. Needs a kempo with the dashboard; ignored on older versions.
 First release. Payment processing for kempo, with Stripe built in and a provider seam from the
 first commit rather than the day a second processor is wanted.
 

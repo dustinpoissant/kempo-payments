@@ -3,6 +3,21 @@
   "git": "https://github.com/dustinpoissant/kempo-payments",
   "public-scope": "payments",
   "schema": "./server/db/schema.js",
+  "widgets": [
+    {
+      "key": "summary",
+      "title": "Payments",
+      "description": "Money captured and refunded, and how many payments there have been.",
+      "icon": "credit_card",
+      "element": "k-pay-widget",
+      "module": "/payments/components/PaymentsWidget.js",
+      "defaultWidth": 2,
+      "defaultHeight": 1,
+      "minWidth": 1,
+      "permission": "payments:view",
+      "priority": 80
+    }
+  ],
   "permissions": [
     { "name": "payments:view", "description": "See payments, what they were for, and what happened to them" },
     { "name": "payments:create", "description": "Take a payment — start a new charge over the API" },
