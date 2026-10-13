@@ -11,9 +11,6 @@
     "test:integration": "node scripts/run-tests.js integration kempo-test -l minimal",
     "link:local": "npm install ../kempo ../kempo-server ../kempo-ui --no-save --no-legacy-peer-deps --force"
   },
-  "kempo": {
-    "public-scope": "payments"
-  },
   "exports": {
     "./install": "./install.js",
     "./update": "./update.js",
@@ -39,7 +36,7 @@
     "stripe": "^22.5.0"
   },
   "peerDependencies": {
-    "kempo": ">=4.2.40",
+    "kempo": ">=4.5.8",
     "kempo-server": ">=3.3.0",
     "kempo-ui": ">=0.4.53"
   },

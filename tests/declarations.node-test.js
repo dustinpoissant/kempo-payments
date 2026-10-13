@@ -185,10 +185,9 @@ export default {
     pass('the endpoint shown on the settings screen is the one that exists');
   },
 
-  'the public scope is the same in both places it is declared': async ({ pass, fail }) => {
-    if(pkg.kempo?.['public-scope'] !== config['public-scope']){
-      return fail(`package.json says "${pkg.kempo?.['public-scope']}" and kempo-config.json says "${config['public-scope']}"`);
-    }
+  'the public scope is declared once, in kempo-config.json, and the code builds its URLs from it': async ({ pass, fail }) => {
+    if('kempo' in pkg) return fail('package.json has a kempo field; it lives in kempo-config.json only');
+    if(!config['public-scope']) return fail('kempo-config.json declares no public-scope');
     /*
       Browser code imports by absolute URL, so a scope change that misses one of them is a 404 in
       the browser and nothing at all at build time.
