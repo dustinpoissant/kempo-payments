@@ -30,6 +30,7 @@ export const EVENTS = [
   'payment:succeeded',   // { payment } — taken
   'payment:failed',      // { payment, error } — the processor refused it
   'payment:canceled',    // { payment } — abandoned, or the hold released
+  'payment:refunding',   // { payment, amount, reason, issuedBy } — guard: throw to refuse the refund
   'payment:refunded',    // { payment, refund } — some or all of it given back
   'payment:disputed',    // { payment, disputed, reason } — a chargeback opened, or closed
 ];

@@ -4,6 +4,15 @@ All notable changes to `kempo-payments` are documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **A `payment:refunding` guard hook.** Fired in bail mode before a refund reaches the processor, with
+  `{ payment, amount, reason, issuedBy }`; a handler that throws `{ code, msg }` refuses the refund
+  with that error and nothing is sent to the processor. The extension that took a payment can now
+  refuse a refund it cannot honour — kempo-credits uses it so a payment for credits that have since
+  been spent cannot be refunded from the Payments screen. Refunds made in the processor's own
+  dashboard do not pass through it.
+
 ### Fixed
 
 - **`payment:failed` fires for every decline, not just the first.** Stripe leaves a declined intent

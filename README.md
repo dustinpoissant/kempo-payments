@@ -213,8 +213,14 @@ Registered by consumers in their own `kempo-config.json`, the same as any other 
 | `payment:succeeded` | `{ payment }` | **taken** — this is the one to fulfil against |
 | `payment:failed` | `{ payment, error }` | the processor refused it — once per decline, so a card declined three times fires it three times |
 | `payment:canceled` | `{ payment }` | abandoned, or the hold released |
+| `payment:refunding` | `{ payment, amount, reason, issuedBy }` | **a guard**, before a refund reaches the processor — throw `{ code, msg }` to refuse it |
 | `payment:refunded` | `{ payment, refund }` | some or all of it given back |
 | `payment:disputed` | `{ payment, disputed, reason }` | a chargeback opened, or closed |
+
+`payment:refunding` is the one guard: it runs in bail mode, so a handler that throws stops the refund
+with its own error before the processor is contacted — how the extension that took a payment refuses a
+refund it cannot honour (kempo-credits, for credits already spent). A refund made in the processor's
+own dashboard never passes through it, so `payment:refunded` can still arrive for one.
 
 `payment:succeeded` fires **once** per payment, on the transition into that state and nowhere else.
 Redelivered webhooks, polling and admin screens all pass through the same place and produce no

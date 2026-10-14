@@ -1,3 +1,4 @@
+import { triggerHook } from 'kempo/server/sdk.js';
 import { providerForPayment } from '../../providers/index.js';
 import { formatAmount } from '../money/currencies.js';
 import { hasNulByte } from './text.js';
@@ -117,6 +118,19 @@ export const refundPayment = async (id, { amount, reason, issuedBy } = {}) => {
   }
   if(requested > outstanding){
     return [{ code: 400, msg: `Only ${formatAmount(outstanding, payment.currency)} is left to refund on this payment` }, null];
+  }
+
+  /*
+    The extension that took the payment gets a say before any money moves. `payment:refunding` is a
+    guard: a handler that throws `{ code, msg }` refuses the refund with that error, and the
+    processor is never asked. kempo-credits uses it so a payment for credits that have since been
+    spent cannot be refunded from here. A refund made in the processor's own dashboard never passes
+    through this, so a listener still has to cope with `payment:refunded` arriving regardless.
+  */
+  try {
+    await triggerHook('payment:refunding', { payment, amount: requested, reason: reason || null, issuedBy: issuedBy || null }, { bail: true });
+  } catch(error) {
+    return [{ code: error?.code || 409, msg: error?.msg || error?.message || 'The refund was refused' }, null];
   }
 
   const [providerError, provider] = providerForPayment(payment);
