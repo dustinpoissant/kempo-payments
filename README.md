@@ -211,7 +211,7 @@ Registered by consumers in their own `kempo-config.json`, the same as any other 
 | `payment:created` | `{ payment }` | an attempt has been started; no money has moved |
 | `payment:authorized` | `{ payment }` | held on the customer's card, waiting to be captured |
 | `payment:succeeded` | `{ payment }` | **taken** — this is the one to fulfil against |
-| `payment:failed` | `{ payment, error }` | the processor refused it |
+| `payment:failed` | `{ payment, error }` | the processor refused it — once per decline, so a card declined three times fires it three times |
 | `payment:canceled` | `{ payment }` | abandoned, or the hold released |
 | `payment:refunded` | `{ payment, refund }` | some or all of it given back |
 | `payment:disputed` | `{ payment, disputed, reason }` | a chargeback opened, or closed |

@@ -1,7 +1,9 @@
 import Stripe from 'stripe';
+import { fileURLToPath } from 'url';
 import { eq } from 'drizzle-orm';
 import db from 'kempo/server/db/index.js';
-import { setSetting, deleteSetting } from 'kempo/server/sdk.js';
+import { hook } from 'kempo/server/db/schema.js';
+import { setSetting, deleteSetting, createHook, clearHandlerCache } from 'kempo/server/sdk.js';
 import { kempoPayment, kempoPaymentEvent, kempoPaymentRefund } from '../server/db/schema.js';
 import { getPayment, insertPayment, listRefunds, newId } from '../server/utils/payments/store.js';
 import { receiveWebhook } from '../server/utils/webhooks/receive.js';
@@ -172,5 +174,45 @@ export default unavailable ? { 'webhooks (SKIPPED)': async ({ pass }) => pass(`s
     await purge();
     await disconnect();
     pass('recorded with the NUL byte removed');
+  },
+
+  /*
+    A second decline with the same message changes nothing on the payment — Stripe leaves it awaiting
+    a card either way — and was therefore never reported: payment:failed fired for the first refusal
+    only. Card testing looks exactly like that, "Your card was declined." over and over, so a listener
+    counting declines heard one. Every new decline fires now; a redelivered one still does not.
+  */
+  'every decline fires payment:failed, including a repeat that changes nothing on the payment': async ({ pass, fail }) => {
+    await purge();
+    await connect();
+    await db.delete(hook).where(eq(hook.owner, 'kempo-payments-test'));
+    await createHook({ owner: 'kempo-payments-test', event: 'payment:failed', callback: fileURLToPath(new URL('./fixtures/record-hook.js', import.meta.url)) });
+    clearHandlerCache();
+    globalThis.kempoPaymentsHooks = [];
+
+    const payment = await makePayment();
+    const declined = (id = `evt_${newId()}`) => ({
+      id,
+      type: 'payment_intent.payment_failed',
+      data: { object: { id: payment.providerRef, status: 'requires_payment_method', amount: 5000, currency: 'usd', livemode: false, last_payment_error: { message: 'Your card was declined.' } } },
+    });
+
+    const first = declined();
+    await deliver(first);
+    await deliver(declined());
+    const [, redelivered] = await deliver(first);
+
+    const heard = globalThis.kempoPaymentsHooks.length;
+    const errors = globalThis.kempoPaymentsHooks.map(data => data.error);
+
+    await db.delete(hook).where(eq(hook.owner, 'kempo-payments-test'));
+    clearHandlerCache();
+    await purge();
+    await disconnect();
+
+    if(!redelivered?.duplicate) return fail('the redelivery was not recognised as a duplicate');
+    if(heard !== 2) return fail(`payment:failed fired ${heard} times for two declines and a redelivery`);
+    if(errors.some(error => error !== 'Your card was declined.')) return fail(`the declines reported ${JSON.stringify(errors)}`);
+    pass('two declines, two hooks; the redelivery none');
   },
 };

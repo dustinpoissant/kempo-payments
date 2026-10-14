@@ -68,7 +68,18 @@ export const applyProviderState = async (payment, state, { failed = false } = {}
   const nextError = stripNulBytes(failed ? (state.lastError || 'The payment failed') : state.lastError ?? null);
   if((nextError || null) !== (payment.lastError || null)) changes.lastError = nextError || null;
 
-  if(!Object.keys(changes).length) return [null, { payment, changed: false }];
+  if(!Object.keys(changes).length){
+    /*
+      A decline is something that happened, not a state the payment moved into. Stripe leaves a
+      declined intent in `requires_payment_method` either way, so a second card declined with the
+      same message as the first changes nothing on the row — and is still a second refusal, which a
+      listener counting declines (kempo-credits' card-testing cool-down) has to hear. Found building
+      that: a card tester's declines all read "Your card was declined.", and only the first one was
+      ever reported. A redelivered event never gets here; receiveWebhook drops it by event id first.
+    */
+    if(failed) await fire('payment:failed', { payment, error: nextError });
+    return [null, { payment, changed: false }];
+  }
 
   const [error, updated] = await updatePayment(payment.id, changes);
   if(error) return [error, null];

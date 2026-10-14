@@ -4,6 +4,14 @@ All notable changes to `kempo-payments` are documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`payment:failed` fires for every decline, not just the first.** Stripe leaves a declined intent
+  awaiting a card either way, so a second decline with the same message ("Your card was declined.")
+  changed nothing on the payment row and fired nothing. That is exactly what card testing looks like,
+  and a listener counting declines — kempo-credits' cool-down — heard one. Each new decline event now
+  fires the hook; a redelivered event still does not, since it is dropped by event id first.
+
 ### Added
 
 - **Dashboard widget.** A **Payments** widget on the kempo admin dashboard showing money captured and refunded per currency, the payment count and any disputes, with a **View payments** button, declared in `widgets` in `kempo-config.json`. Needs a kempo with the dashboard; ignored on older versions.
