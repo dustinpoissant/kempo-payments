@@ -73,7 +73,11 @@ that; do not edit existing tests to make them pass.
 - The old suite passes untouched. New tests cover: row stores the account and fee, refund of a
   connected payment passes the account, `receiveVerifiedEvent` updates a connected payment.
 - README documents the new parameters, the `refundApplicationFee` default, and the webhook entry
-  point's trust model. CHANGELOG written. Published as a **minor** version.
+  point's trust model. CHANGELOG written. It is a **minor** version — **committed locally; the owner
+  publishes it** (2026-10-14: nothing is pushed by a build run).
+- The unreleased commits already on this repository (`payment:failed` on every decline, the
+  `payment:refunding` guard) ship in the same release, so the version this becomes carries them too:
+  say so in the CHANGELOG.
 
 ## Conventions
 
