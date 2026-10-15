@@ -27,13 +27,32 @@
   As in kempo's other extensions these are the *data* operations, with no permission checks of
   their own. The routes under public/api enforce who may do what; anything calling in here is
   server-side code that has already decided it is allowed.
+
+  **Payments on a connected account** (Stripe Connect direct charges — what kempo-payouts makes)
+  are the same calls with two more fields:
+
+  ```js
+  const [error, { payment, clientSecret }] = await createPayment({
+    amount: 500, currency: 'usd', owner: 'kempo-payouts', reference: tip.id,
+    connectedAccount: 'acct_1Nv0FGQ9RKHgCVdK',  // whose account the money goes to
+    applicationFee: 25,                         // the site's cut, same minor units
+  });
+  ```
+
+  The browser form then needs `connected-account="acct_…"`. Every later call — capture, cancel,
+  refund, sync — reads the account off the payment, so nothing else changes for the caller. A
+  refund gives the fee back with it unless `refundApplicationFee: false` is passed.
+
+  `receiveVerifiedEvent` applies a webhook event **that the caller has already verified**. It does
+  no signature check. It exists for kempo-payouts, which owns the Connect webhook endpoint; nothing
+  else should call it.
 */
 
 export { createPayment } from './server/utils/payments/create.js';
-export { capturePayment, cancelPayment, refundPayment, getClientSecret } from './server/utils/payments/actions.js';
+export { capturePayment, cancelPayment, refundPayment, refundOptionsFor, getClientSecret } from './server/utils/payments/actions.js';
 export { getPayment, getPaymentByRef, paymentsForReference, listPayments, listRefunds, summary } from './server/utils/payments/store.js';
 export { syncPayment, EVENTS } from './server/utils/payments/sync.js';
-export { receiveWebhook, listEvents } from './server/utils/webhooks/receive.js';
+export { receiveWebhook, receiveVerifiedEvent, listEvents } from './server/utils/webhooks/receive.js';
 
 export { STATUSES, FINAL, isStatus, isFinal, isAwaitingCustomer, canCapture, canCancel, refundableAmount } from './server/utils/payments/statuses.js';
 export { decimalsFor, formatAmount, fromMinor, isValidAmount, isValidCurrency, normaliseCurrency, toMinor } from './server/utils/money/currencies.js';

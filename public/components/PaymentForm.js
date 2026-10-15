@@ -59,6 +59,18 @@ import { getConfig } from '/payments/sdk.js';
   this extension's own test screen is the one LightComponent among its admin components, and it is
   the first thing to check if a checkout somewhere shows an empty box where a card field should be.
 
+  **A payment on somebody else's account** — a Stripe Connect direct charge, which is what
+  kempo-payouts creates — needs `connected-account`. The intent lives on that account, and Stripe.js
+  initialised without `{ stripeAccount }` cannot see it: the form loads and then every confirm fails
+  as though the payment did not exist.
+
+  ```html
+  <k-pay-form client-secret="pi_..._secret_..." connected-account="acct_1Nv0FGQ9RKHgCVdK"></k-pay-form>
+  ```
+
+  The value is the `connectedAccount` on the payment `createPayment` returned (or that
+  `getClientSecret` returns).
+
   What it emits, and nothing it emits should be trusted as proof of payment:
 
   | Event                | When                                                       |
@@ -246,6 +258,7 @@ export default class PaymentForm extends LightComponent {
   static properties = {
     clientSecret: { type: String, attribute: 'client-secret' },
     publishableKey: { type: String, attribute: 'publishable-key' },
+    connectedAccount: { type: String, attribute: 'connected-account' },
     returnUrl: { type: String, attribute: 'return-url' },
     submitLabel: { type: String, attribute: 'submit-label' },
     phase: { type: String, state: true },
@@ -266,6 +279,7 @@ export default class PaymentForm extends LightComponent {
     super();
     this.clientSecret = '';
     this.publishableKey = '';
+    this.connectedAccount = '';
     /*
       Payment methods that leave the site to authenticate — a bank's 3-D Secure page — have to be
       told where to come back to, and the processor refuses to start one without it. Defaulting to
@@ -363,7 +377,7 @@ export default class PaymentForm extends LightComponent {
       }
 
       const Stripe = await loadStripeJs();
-      this.#stripe = Stripe(key);
+      this.#stripe = this.connectedAccount ? Stripe(key, { stripeAccount: this.connectedAccount }) : Stripe(key);
       const tokens = readTokens();
       const fieldStyle = buildFieldStyle(tokens);
       this.#elements = this.#stripe.elements({ clientSecret: this.clientSecret, appearance: buildAppearance(tokens) });

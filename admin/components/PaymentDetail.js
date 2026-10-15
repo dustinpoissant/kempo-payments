@@ -25,6 +25,7 @@ export default class PaymentDetail extends ShadowComponent {
     refundable: { type: Number, state: true },
     refundAmount: { type: String, state: true },
     refundReason: { type: String, state: true },
+    refundFee: { type: Boolean, state: true },
     busy: { type: String, state: true },
     error: { type: String, state: true },
     notice: { type: String, state: true },
@@ -39,6 +40,7 @@ export default class PaymentDetail extends ShadowComponent {
     this.refundable = 0;
     this.refundAmount = '';
     this.refundReason = '';
+    this.refundFee = true;
     this.busy = '';
     this.error = '';
     this.notice = '';
@@ -117,7 +119,7 @@ export default class PaymentDetail extends ShadowComponent {
       return;
     }
 
-    const ok = await this.#run('refund', () => refundPayment(this.payment.id, { amount, reason: this.refundReason || null }));
+    const ok = await this.#run('refund', () => refundPayment(this.payment.id, { amount, reason: this.refundReason || null, ...(this.payment.applicationFee > 0 ? { refundApplicationFee: this.refundFee } : {}) }));
     if(ok){
       this.refundReason = '';
       this.notice = 'Refund issued. It can take a few days to appear on the customer’s statement.';
@@ -193,6 +195,14 @@ export default class PaymentDetail extends ShadowComponent {
             />
           </label>
 
+          ${payment.applicationFee > 0 ? html`
+            <label class="checkbox mb">
+              <input type="checkbox" .checked=${this.refundFee} @change=${event => { this.refundFee = event.target.checked; }} />
+              Give back the site’s fee too
+              <small class="d-b tc-muted">This payment went to a connected account and the site kept ${formatAmount(payment.applicationFee, payment.currency)}. Ticked, that fee is returned in proportion to the refund; unticked, the account pays the whole refund and the site keeps its fee.</small>
+            </label>
+          ` : ''}
+
           <button class="danger" ?disabled=${!!this.busy} @click=${this.refund}>Refund</button>
         </div>
       </k-permission>
@@ -257,6 +267,10 @@ export default class PaymentDetail extends ShadowComponent {
         <dt>Captured</dt><dd>${formatAmount(payment.amountCaptured, payment.currency)}</dd>
         <dt>Refunded</dt><dd>${formatAmount(payment.amountRefunded, payment.currency)}</dd>
         <dt>Capture</dt><dd>${payment.captureMethod === 'manual' ? 'Manual — must be captured' : 'Automatic'}</dd>
+        ${payment.connectedAccount ? html`
+          <dt>Paid to</dt><dd><span class="ff-mono">${payment.connectedAccount}</span> — a connected account, not this site’s</dd>
+          <dt>Site’s fee</dt><dd>${formatAmount(payment.applicationFee || 0, payment.currency)}</dd>
+        ` : ''}
         ${payment.owner ? html`<dt>Requested by</dt><dd>${payment.owner}${payment.reference ? ` · ${payment.reference}` : ''}</dd>` : ''}
         ${payment.customerEmail ? html`<dt>Email</dt><dd>${payment.customerEmail}</dd>` : ''}
         <dt>Started</dt><dd>${new Date(payment.createdAt).toLocaleString()}</dd>

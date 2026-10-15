@@ -1,7 +1,10 @@
 # kempo-payments — PLAN: connected-account charges
 
-> Status: **planned, nothing built.** This file scopes one change to an existing, published
-> extension. It exists so [kempo-payouts](../kempo-payouts/PLAN.md) can be built on top.
+> Status: **built 2026-10-15, committed locally, not pushed or published** (release as 0.2.0, a
+> minor). This file scoped one change to an existing, published extension so
+> [kempo-payouts](../kempo-payouts/PLAN.md) could be built on top. What was built is in the README
+> ("Payments on a connected account") and the CHANGELOG; the test-mode procedure is
+> `scripts/connect-test-mode.js` (13 of 13 on 2026-10-15).
 
 > **Upstream changes are allowed.** Every dependency with `kempo` in its name (kempo, kempo-ui,
 > kempo-css, kempo-server, kempo-payments, kempo-media, and the rest) is owned by the same person, and

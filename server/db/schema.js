@@ -68,6 +68,21 @@ export const kempoPayment = pgTable('kempoPayment', {
 
   disputed: boolean('disputed').notNull().default(false),
 
+  /*
+    A payment taken on somebody else's account rather than the site's — a Stripe Connect *direct
+    charge*, which kempo-payouts creates for a user being paid by another. `connectedAccount` is the
+    processor's id for that account (`acct_…`) and `applicationFee` the part the site keeps, in the
+    same minor units as `amount`. Both null for an ordinary payment into the site's own account.
+
+    The account is read from here for every later call — capture, cancel, refund, sync — and never
+    taken from a caller: an intent that lives on a connected account cannot even be found without it,
+    and the error the processor gives ("no such payment") points nowhere near the cause.
+
+    Added after the table was first created, so update.js adds them to sites that already have it.
+  */
+  connectedAccount: text('connectedAccount'),
+  applicationFee: integer('applicationFee'),
+
   createdAt: timestamp('createdAt').notNull(),
   updatedAt: timestamp('updatedAt').notNull(),
 }, table => ({

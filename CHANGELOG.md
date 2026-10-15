@@ -4,6 +4,45 @@ All notable changes to `kempo-payments` are documented in this file.
 
 ## [Unreleased]
 
+To be released as **0.2.0** (a minor), and carrying everything below in this section: the
+connected-account support and the two earlier unreleased changes (`payment:refunding`, and
+`payment:failed` on every decline). Committed locally; not pushed or published.
+
+### Added — payments on a connected account (Stripe Connect direct charges)
+
+What [kempo-payouts](https://github.com/dustinpoissant/kempo-payouts) builds on: a payment taken on a
+user's own Stripe account, with a fee for the site. Nothing changes for a site that never uses it —
+the existing suite passes unmodified.
+
+- **`createPayment` takes `connectedAccount` (`acct_…`) and `applicationFee`** (minor units), both
+  optional and both stored on the payment row as new nullable columns. A fee without an account, an
+  account id that is not one, and a fee that is negative, not whole, or not less than the payment are
+  refused with a 400 before the processor is contacted.
+- **The provider contract takes the account on every call** — `createIntent`, `retrieveIntent`,
+  `capture`, `cancel`, `refund`, `listRefunds` receive `{ connectedAccount }`, and the Stripe module
+  sends it as the `Stripe-Account` header (and `application_fee_amount` on create). It is always read
+  from the stored payment, never a caller. `clientConfig({ connectedAccount })` and `getClientSecret`
+  return the account for the browser.
+- **Refunds take `refundApplicationFee`**, default `true` for a payment that took a fee: the site's fee
+  is given back in proportion. `false` keeps it. The admin refund form has a checkbox for it and the
+  refund route accepts it.
+- **`<k-pay-form connected-account="acct_…">`** initialises Stripe.js with `{ stripeAccount }`, without
+  which it cannot confirm an intent on another account.
+- **`receiveVerifiedEvent({ event })`** in the SDK applies a webhook event the caller has already
+  verified — for kempo-payouts, which owns the separate Connect webhook endpoint. **It does no
+  signature check**; only kempo-payouts should call it.
+- **Events are applied only to payments on the account they came from**, on both entry points: a
+  connected account's event to its own payment, the platform's to the platform's. Anything else is
+  recorded and left alone.
+- **`listPayments({ connectedAccount })`**, and the admin payment screen shows the account and fee.
+- **Migration:** `update.js` (and `install.js`) add `connectedAccount` and `applicationFee` to an
+  existing `kempoPayment` table with `ADD COLUMN IF NOT EXISTS`, since kempo never alters an existing
+  table. Tested from a table without them.
+- **`scripts/connect-test-mode.js`**, the manual procedure against Stripe's test mode: create with a
+  fee, confirm, sync, fee received, refund with and without the fee, capture, cancel, client secret,
+  and a real event through `receiveVerifiedEvent`. 13 of 13 on 2026-10-15, on an Express Dashboard and
+  a full Stripe Dashboard account. `npm test` still never calls Stripe.
+
 ### Added
 
 - **A `payment:refunding` guard hook.** Fired in bail mode before a refund reaches the processor, with

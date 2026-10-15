@@ -52,7 +52,7 @@ export const capturePayment = async (id, { amount } = {}) => {
   const [providerError, provider] = providerForPayment(payment);
   if(providerError) return [providerError, null];
 
-  const [captureError, state] = await provider.capture(payment.providerRef, { amount });
+  const [captureError, state] = await provider.capture(payment.providerRef, { amount, connectedAccount: payment.connectedAccount });
   if(captureError) return [captureError, null];
 
   return applyProviderState(payment, state);
@@ -76,10 +76,30 @@ export const cancelPayment = async id => {
   const [providerError, provider] = providerForPayment(payment);
   if(providerError) return [providerError, null];
 
-  const [cancelError, state] = await provider.cancel(payment.providerRef);
+  const [cancelError, state] = await provider.cancel(payment.providerRef, { connectedAccount: payment.connectedAccount });
   if(cancelError) return [cancelError, null];
 
   return applyProviderState(payment, state);
+};
+
+/*
+  What a refund of this payment is sent to the processor with, beyond the amount and reason.
+
+  The connected account comes from the row, never the caller — the refund cannot reach the money
+  without it. `refundApplicationFee` only applies to a payment that took a fee on a connected
+  account, and defaults to **true** there: refunding a tip gives back the site's cut of it too, in
+  proportion. Stripe's own default is the opposite (the site keeps its fee and the recipient pays
+  the whole refund), which is why it is always sent explicitly. Pass `false` to keep the fee.
+
+  Exported so the decision can be tested without a processor.
+*/
+export const refundOptionsFor = (payment, { refundApplicationFee } = {}) => {
+  if(!payment?.connectedAccount) return {};
+  if(!(payment.applicationFee > 0)) return { connectedAccount: payment.connectedAccount };
+  return {
+    connectedAccount: payment.connectedAccount,
+    refundApplicationFee: typeof refundApplicationFee === 'boolean' ? refundApplicationFee : true,
+  };
 };
 
 /*
@@ -88,11 +108,17 @@ export const cancelPayment = async id => {
   Omitting the amount refunds everything still outstanding, which is what a "Refund" button should
   do and what most callers want. Passing one refunds exactly that much, and several partial refunds
   can be issued until the outstanding amount reaches zero.
+
+  For a payment on a connected account, `refundApplicationFee` decides whether the site's fee is
+  returned with it — see `refundOptionsFor`.
 */
-export const refundPayment = async (id, { amount, reason, issuedBy } = {}) => {
+export const refundPayment = async (id, { amount, reason, issuedBy, refundApplicationFee } = {}) => {
   // Checked before the processor is asked: once it has refunded, a failed insert is a refund nobody recorded.
   if(hasNulByte(reason, issuedBy)){
     return [{ code: 400, msg: 'A refund reason cannot contain null characters' }, null];
+  }
+  if(refundApplicationFee !== undefined && refundApplicationFee !== null && typeof refundApplicationFee !== 'boolean'){
+    return [{ code: 400, msg: 'Whether to refund the application fee is true or false' }, null];
   }
 
   const [loadError, payment] = await getPayment(id);
@@ -136,7 +162,11 @@ export const refundPayment = async (id, { amount, reason, issuedBy } = {}) => {
   const [providerError, provider] = providerForPayment(payment);
   if(providerError) return [providerError, null];
 
-  const [refundError, refund] = await provider.refund(payment.providerRef, { amount: requested, reason });
+  const [refundError, refund] = await provider.refund(payment.providerRef, {
+    amount: requested,
+    reason,
+    ...refundOptionsFor(payment, { refundApplicationFee: refundApplicationFee ?? undefined }),
+  });
   if(refundError) return [refundError, null];
 
   return applyRefunds(payment, [refund], { issuedBy });
@@ -156,8 +186,12 @@ export const getClientSecret = async id => {
   const [providerError, provider] = providerForPayment(payment);
   if(providerError) return [providerError, null];
 
-  const [fetchError, state] = await provider.retrieveIntent(payment.providerRef);
+  const [fetchError, state] = await provider.retrieveIntent(payment.providerRef, { connectedAccount: payment.connectedAccount });
   if(fetchError) return [fetchError, null];
 
-  return [null, { payment, clientSecret: state.clientSecret }];
+  /*
+    The connected account travels with the secret: a payment form cannot confirm an intent that
+    lives on another account unless it is told which one.
+  */
+  return [null, { payment, clientSecret: state.clientSecret, connectedAccount: payment.connectedAccount || null }];
 };

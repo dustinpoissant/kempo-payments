@@ -149,6 +149,9 @@ A reusable custom element, served from this extension:
 ></k-pay-form>
 ```
 
+For a payment on a connected account add `connected-account="acct_…"` — see
+[Payments on a connected account](#payments-on-a-connected-account-stripe-connect).
+
 It shows two things, either of which may be absent depending on what is available:
 
 - **Express Checkout** — a row of wallet buttons (Apple Pay, Google Pay, Link, and PayPal or Amazon
@@ -267,6 +270,99 @@ missed entirely.
 A refund amount larger than what is left is refused with the remaining amount in the payment's own
 currency (`Only $5.00 is left to refund on this payment`).
 
+## Payments on a connected account (Stripe Connect)
+
+A payment can be taken **on somebody else's Stripe account** rather than the site's — a Connect
+*direct charge*. This is what [kempo-payouts](https://github.com/dustinpoissant/kempo-payouts) uses to
+let one user pay another (a guest tipping a DJ) while the site keeps a fee. kempo-payouts onboards the
+accounts; this extension takes, records, refunds and webhook-syncs the payments, so there is one
+payment record and one set of hooks whichever account the money went to.
+
+```js
+const [error, { payment, clientSecret }] = await createPayment({
+  amount: 500,                              // $5.00, minor units as always
+  currency: 'usd',
+  owner: 'kempo-payouts',
+  reference: tip.id,
+  connectedAccount: 'acct_1Nv0FGQ9RKHgCVdK', // whose account the money goes to
+  applicationFee: 25,                        // the site's cut, in the same minor units
+});
+```
+
+```html
+<k-pay-form client-secret="…" connected-account="acct_1Nv0FGQ9RKHgCVdK"></k-pay-form>
+```
+
+- **Both new fields are optional, and stored on the payment** (`connectedAccount`, `applicationFee`).
+  A site that never passes them behaves exactly as before. Refused with a 400 before any processor is
+  asked: a fee with no account, an account id that is not `acct_…`, and a fee that is negative, not
+  whole, or not less than the payment. A fee of 0 takes no fee.
+- **Every later call reads the account off the payment** — capture, cancel, refund, sync, the client
+  secret — and never from a caller. An intent on a connected account cannot be found without it, and
+  Stripe's error when it is missing ("No such payment_intent") points nowhere near the cause.
+- **The browser needs the account too.** `<k-pay-form connected-account="…">` initialises Stripe.js
+  with `{ stripeAccount }`; without it the form loads and every confirm fails. `getClientSecret`
+  returns `connectedAccount` alongside the secret for this reason.
+- **Refunds give the site's fee back by default.** `refundPayment(id, { refundApplicationFee })`
+  defaults to `true` for a payment that took a fee: the fee is returned in proportion to the refund —
+  all of it on a full refund. Pass `false` to keep it, in which case the connected account pays the
+  whole refund. (Stripe's own default is the opposite, so this extension always sends one or the
+  other.) The admin refund form has a checkbox for it; the HTTP route takes `refundApplicationFee`.
+- **Statuses and hooks are unchanged.** `payment:succeeded` and the rest fire as before, with
+  `connectedAccount` and `applicationFee` on the payment so a listener can tell.
+- **The admin screen** shows which account a payment went to and the site's fee.
+
+### Webhooks for connected accounts — `receiveVerifiedEvent`
+
+Stripe does not send connected-account events to this extension's endpoint. They go to a separate
+*Connect* endpoint with its own signing secret, which kempo-payouts owns. After verifying an event
+against that secret, kempo-payouts passes it to:
+
+```js
+import { receiveVerifiedEvent } from 'kempo-payments/sdk';
+await receiveVerifiedEvent({ event });   // provider defaults to 'stripe'
+```
+
+which applies it through exactly the same path as this extension's own webhook — the same
+idempotency (by event id), the same refund and dispute handling, the same hooks.
+
+> **`receiveVerifiedEvent` does no signature check.** Whatever reaches it is believed. Passing a
+> request body to it without verifying the signature first lets anybody on the internet mark any
+> payment paid. Only kempo-payouts should call it.
+
+One check does remain on every event, on both entry points: an event is applied only to a payment
+made **on the account it came from** — a connected account's event to that account's payment, the
+platform's own event to the platform's. Anything else is recorded and left alone.
+
+### Updating an existing site
+
+The two columns are added by `update.js` (`ALTER TABLE … ADD COLUMN IF NOT EXISTS`), since kempo
+never alters an existing table. Every existing payment reads back with both null, which is what it
+was: a payment into the site's own account.
+
+### Proving it against Stripe's test mode
+
+`npm test` never calls Stripe. The connected-account calls are proved against a real test-mode
+Connect account by a script that runs this extension's own code on an in-memory database:
+
+```bash
+STRIPE_TEST_SECRET_KEY=sk_test_… STRIPE_TEST_PUBLISHABLE_KEY=pk_test_… \
+STRIPE_TEST_CONNECTED_ACCOUNT=acct_… node scripts/connect-test-mode.js
+```
+
+It refuses anything but test keys. It creates a payment with a fee on the account and checks the
+intent is there (and not on the platform), confirms it with a test card, syncs it, checks the site
+received the fee, refunds part with the fee (checks the fee was refunded in proportion) and part
+without (checks it was kept), reads both refunds back, captures a held payment, cancels an unpaid
+one, and finally runs a real `payment_intent.succeeded` event — read back from the account, not
+written by hand — through `receiveVerifiedEvent`. Without `STRIPE_TEST_CONNECTED_ACCOUNT` it uses the
+first connected account that can take card payments. Last run 2026-10-15: 13 of 13, on both an
+Express Dashboard account and a full Stripe Dashboard account.
+
+Wallets on a connected account (Apple Pay in particular) need the site's domain registered **on that
+account** — Stripe's payment method domains, created with the account's `Stripe-Account` header. That
+is kempo-payouts' job when it onboards an account, not something this extension can do.
+
 ## When an event cannot be applied
 
 The webhook marks an event handled only **after** it has been applied. If applying it fails — the
@@ -311,8 +407,13 @@ import {
   createPayment, capturePayment, cancelPayment, refundPayment,
   getPayment, getPaymentByRef, paymentsForReference, listPayments,
   syncPayment, getClientSecret, refundableAmount, formatAmount,
+  receiveVerifiedEvent, refundOptionsFor,
 } from 'kempo-payments/sdk';
 ```
+
+`createPayment` also takes `connectedAccount` and `applicationFee`, `refundPayment` takes
+`refundApplicationFee`, and `listPayments` filters by `connectedAccount` — see
+[Payments on a connected account](#payments-on-a-connected-account-stripe-connect).
 
 Every one returns kempo's `[error, data]` tuple. None of them checks a permission — the HTTP routes
 do that, and anything importing this is server-side code that has already decided it is allowed.
@@ -364,7 +465,9 @@ rest of the extension has one vocabulary rather than one per processor.
 - **Subscriptions and recurring billing.** A separate concern with its own state machine, dunning
   and proration. This extension is the thing one would be built on.
 - **Saved cards and stored customers.** Nothing is kept on file; every payment stands alone.
-- **Payouts, balances and reconciliation.** The processor's dashboard is the ledger.
+- **Payouts, balances and reconciliation.** The processor's dashboard is the ledger. Paying *other
+  users* — onboarding their accounts, a fee policy, a page for them — is kempo-payouts; this extension
+  only takes the payment on their account.
 - **Answering disputes.** They are flagged here and answered there — evidence submission is a
   processor-specific workflow with deadlines attached.
 - **Tax.** That is `kempo-tax`, deliberately separate: "compute what is owed" and "move money" are

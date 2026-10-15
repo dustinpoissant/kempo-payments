@@ -2,7 +2,7 @@ import { sql } from 'drizzle-orm';
 import db from 'kempo/server/db/index.js';
 
 /*
-  Two things the declarative config cannot do.
+  Three things the declarative config cannot do.
 
   **The indexes.** kempo's installer generates `CREATE TABLE` from the Drizzle schema and reads
   columns and primary keys off it — indexes and unique constraints declared on a table are not
@@ -13,11 +13,22 @@ import db from 'kempo/server/db/index.js';
   test checks the two lists agree — a schema index that this file forgets exists only in
   development, where `drizzle-kit push` makes it.
 
+  **The columns added since the tables were first created.** kempo creates a table that is missing
+  and never alters one that exists, so a site that installed before `connectedAccount` and
+  `applicationFee` would never get them, and every payment read would fail on a missing column.
+  `IF NOT EXISTS` makes adding them safe on every install and update. A failure here fails the
+  install: carrying on without them breaks every payment, not just the new kind.
+
   **The warning.** Every credential this extension stores is a `secret` setting, and kempo can only
   encrypt those when SETTINGS_ENCRYPTION_KEY is set. Without it the settings are silently not
   created, and the first sign of trouble is a settings screen that refuses to save a key with no
   explanation. Saying so at install time is the difference between a two-minute fix and an hour.
 */
+
+export const COLUMNS = [
+  { name: 'kempoPayment.connectedAccount', sql: sql`ALTER TABLE "kempoPayment" ADD COLUMN IF NOT EXISTS "connectedAccount" text` },
+  { name: 'kempoPayment.applicationFee', sql: sql`ALTER TABLE "kempoPayment" ADD COLUMN IF NOT EXISTS "applicationFee" integer` },
+];
 
 const INDEXES = [
   sql`CREATE UNIQUE INDEX IF NOT EXISTS "kempoPayment_providerRef_idx" ON "kempoPayment" ("provider", "providerRef")`,
@@ -25,7 +36,19 @@ const INDEXES = [
   sql`CREATE INDEX IF NOT EXISTS "kempoPaymentRefund_payment_idx" ON "kempoPaymentRefund" ("paymentId")`,
 ];
 
+export const ensureColumns = async () => {
+  for(const column of COLUMNS){
+    try {
+      await db.execute(column.sql);
+    } catch(error) {
+      throw new Error(`[kempo-payments] Could not add the column ${column.name}: ${error.message}`);
+    }
+  }
+};
+
 export default async () => {
+  await ensureColumns();
+
   for(const statement of INDEXES){
     try {
       await db.execute(statement);

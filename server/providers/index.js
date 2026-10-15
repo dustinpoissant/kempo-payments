@@ -21,19 +21,24 @@ import { DEFAULTS } from '../utils/config/settings.js';
   | `signatureHeader`  | the request header its webhook signature arrives in                       |
   | `credentialFields` | the settings holding its credentials, in the order a screen shows them     |
   | `status()`         | `[err, { configured, mode, livemode, … }]` — is it usable, and in which mode |
-  | `clientConfig()`   | `[err, { publishableKey }]` — the part of the config a browser may hold    |
-  | `createIntent()`   | `[err, { ref, status, clientSecret, … }]`                                 |
-  | `retrieveIntent()` | `[err, { ref, status, … }]`                                               |
-  | `capture()`        | `[err, { ref, status, … }]`                                               |
-  | `cancel()`         | `[err, { ref, status, … }]`                                               |
-  | `refund()`         | `[err, { ref, amount, status, … }]`                                       |
-  | `listRefunds()`    | optional: `[err, [{ ref, amount, status, … }]]` — every refund on a payment |
+  | `clientConfig({ connectedAccount })` | `[err, { publishableKey, … }]` — the part of the config a browser may hold |
+  | `createIntent({ …, connectedAccount, applicationFee })` | `[err, { ref, status, clientSecret, … }]` |
+  | `retrieveIntent(ref, { connectedAccount })` | `[err, { ref, status, … }]`                      |
+  | `capture(ref, { amount, connectedAccount })` | `[err, { ref, status, … }]`                     |
+  | `cancel(ref, { connectedAccount })` | `[err, { ref, status, … }]`                              |
+  | `refund(ref, { amount, reason, connectedAccount, refundApplicationFee })` | `[err, { ref, amount, status, … }]` |
+  | `listRefunds(ref, { connectedAccount })` | optional: `[err, [{ ref, amount, status, … }]]` — every refund on a payment |
   | `verifyEvent()`    | `[err, event]` — reject anything not signed by the provider               |
-  | `interpretEvent()` | `{ kind: 'payment' \| 'refund' \| 'dispute' \| 'ignored', … }`            |
+  | `interpretEvent()` | `{ kind: 'payment' \| 'refund' \| 'dispute' \| 'ignored', connectedAccount, … }` |
 
   Statuses coming out of any of these are kempo's, not the provider's — see
   server/utils/payments/statuses.js. Mapping is the provider module's job precisely so that the
   rest of the extension has one vocabulary rather than one per processor.
+
+  `connectedAccount` is the account a payment was taken on when it is not the site's own — a Connect
+  direct charge, made by kempo-payouts. A provider that has no such thing ignores it. One that does
+  must send it with every call about that payment, because the payment does not exist anywhere else.
+  The caller is always this extension, reading it off the stored payment, never a request.
 
   Roadmap processors — PayPal, Square, Mollie, Amazon Pay — each become one more file here. Wallet
   and buy-now-pay-later methods (Apple Pay, Google Pay, Klarna, Afterpay, Affirm) are deliberately

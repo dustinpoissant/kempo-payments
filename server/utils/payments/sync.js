@@ -167,7 +167,9 @@ export const syncPayment = async id => {
   const [providerError, provider] = providerForPayment(payment);
   if(providerError) return [providerError, null];
 
-  const [fetchError, state] = await provider.retrieveIntent(payment.providerRef);
+  const on = { connectedAccount: payment.connectedAccount };
+
+  const [fetchError, state] = await provider.retrieveIntent(payment.providerRef, on);
   if(fetchError) return [fetchError, null];
 
   if(!provider.listRefunds) return applyProviderState(payment, state);
@@ -178,7 +180,7 @@ export const syncPayment = async id => {
     from rows would then quietly erase it. The total is also held back from `applyProviderState`
     so that `applyRefunds` sees the change and fires `payment:refunded` for it.
   */
-  const [refundsError, refunds] = await provider.listRefunds(payment.providerRef);
+  const [refundsError, refunds] = await provider.listRefunds(payment.providerRef, on);
   if(refundsError) return [refundsError, null];
 
   const [stateError, applied] = await applyProviderState(payment, { ...state, amountRefunded: undefined });

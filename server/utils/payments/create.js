@@ -24,9 +24,27 @@ export const createPayment = async ({
   reference = null,
   userId = null,
   customerEmail = null,
+  connectedAccount = null,
+  applicationFee = null,
 } = {}) => {
-  if(hasNulByte(description, metadata, owner, reference, userId, customerEmail)){
+  if(hasNulByte(description, metadata, owner, reference, userId, customerEmail, connectedAccount)){
     return [{ code: 400, msg: 'Payment details cannot contain null characters' }, null];
+  }
+
+  /*
+    A payment on a connected account: the money goes to that account, and the site keeps
+    `applicationFee` of it. Checked before anything else, because a malformed account id reaches the
+    processor as "no such account" and a fee that is not a whole, smaller number is either refused
+    there or, worse, accepted as a different cut than anybody meant.
+  */
+  if(connectedAccount !== null && (typeof connectedAccount !== 'string' || !/^acct_[A-Za-z0-9]+$/.test(connectedAccount))){
+    return [{ code: 400, msg: 'A connected account is the processor’s account id, such as acct_1Nv0FGQ9RKHgCVdK' }, null];
+  }
+  if(applicationFee !== null && applicationFee !== undefined){
+    if(!connectedAccount) return [{ code: 400, msg: 'An application fee can only be taken on a payment to a connected account' }, null];
+    if(!Number.isInteger(applicationFee) || applicationFee < 0){
+      return [{ code: 400, msg: 'An application fee must be a whole number of the currency’s smallest unit, zero or more' }, null];
+    }
   }
 
   /*
@@ -60,6 +78,16 @@ export const createPayment = async ({
     return [{ code: 400, msg: `${amount} is not a chargeable amount in ${code.toUpperCase()}` }, null];
   }
 
+  /*
+    Stripe takes a fee that is less than the charge, and in the three-decimal currencies only a whole
+    number of hundredths — the same rule as the amount. Zero is allowed and simply sends no fee.
+  */
+  const fee = Number.isInteger(applicationFee) ? applicationFee : null;
+  if(fee){
+    if(fee >= amount) return [{ code: 400, msg: 'The application fee has to be less than the payment' }, null];
+    if(!isValidAmount(fee, code)) return [{ code: 400, msg: `${fee} is not a valid fee in ${code.toUpperCase()}` }, null];
+  }
+
   const [providerError, provider] = await activeProvider();
   if(providerError) return [providerError, null];
 
@@ -78,6 +106,8 @@ export const createPayment = async ({
     captureMethod: method,
     customerEmail,
     idempotencyKey: id,
+    connectedAccount,
+    applicationFee: fee,
   });
   if(intentError) return [intentError, null];
 
@@ -97,6 +127,8 @@ export const createPayment = async ({
     metadata,
     userId,
     customerEmail,
+    connectedAccount,
+    applicationFee: fee,
   });
 
   /*
@@ -105,7 +137,7 @@ export const createPayment = async ({
     the intent expires on its own, and the id is logged so it can be found by hand in the meantime.
   */
   if(insertError){
-    const [cancelError] = await provider.cancel(intent.ref);
+    const [cancelError] = await provider.cancel(intent.ref, { connectedAccount });
     if(cancelError) console.error(`[kempo-payments] Orphaned ${provider.name} intent ${intent.ref} — could not be recorded or cancelled`);
     return [insertError, null];
   }

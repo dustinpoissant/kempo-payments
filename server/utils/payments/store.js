@@ -81,6 +81,8 @@ export const insertPayment = async values => {
     customerEmail: values.customerEmail || null,
     lastError: values.lastError || null,
     disputed: false,
+    connectedAccount: values.connectedAccount || null,
+    applicationFee: Number.isInteger(values.applicationFee) ? values.applicationFee : null,
     createdAt: now,
     updatedAt: now,
   };
@@ -108,10 +110,11 @@ export const updatePayment = async (id, changes) => {
 
 /*
   Filtered, paged, newest first. `status` accepts a list so the admin screen can offer "needs
-  attention" as one filter rather than making somebody look at four.
+  attention" as one filter rather than making somebody look at four. `connectedAccount` finds the
+  payments taken on one connected account.
 */
-export const listPayments = async ({ status, provider, owner, reference, userId, limit = 50, offset = 0 } = {}) => {
-  if(hasNulByte(status, provider, owner, reference, userId)){
+export const listPayments = async ({ status, provider, owner, reference, userId, connectedAccount, limit = 50, offset = 0 } = {}) => {
+  if(hasNulByte(status, provider, owner, reference, userId, connectedAccount)){
     return [{ code: 400, msg: 'Filters cannot contain null characters' }, null];
   }
 
@@ -121,6 +124,7 @@ export const listPayments = async ({ status, provider, owner, reference, userId,
   if(owner) conditions.push(eq(kempoPayment.owner, owner));
   if(reference) conditions.push(eq(kempoPayment.reference, reference));
   if(userId) conditions.push(eq(kempoPayment.userId, userId));
+  if(connectedAccount) conditions.push(eq(kempoPayment.connectedAccount, connectedAccount));
 
   const where = conditions.length ? and(...conditions) : undefined;
   const take = Math.min(200, Math.max(1, Number(limit) || 50));

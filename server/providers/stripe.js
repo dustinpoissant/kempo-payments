@@ -225,13 +225,38 @@ export const status = async () => {
   }];
 };
 
-export const clientConfig = async () => {
-  const { publishableKey } = await credentials();
-  if(!publishableKey) return [{ code: 409, msg: 'Stripe is not connected yet' }, null];
-  return [null, { publishableKey }];
+/*
+  The options every call about one intent is sent with.
+
+  An intent made on a connected account (a Connect *direct charge*) exists only on that account, so
+  every later call has to name it in the `Stripe-Account` header — the SDK's `stripeAccount` option.
+  Leaving it off does not fail loudly: Stripe answers "No such payment_intent", for an intent that is
+  sitting right there on the other account. So the account always comes from the payment row (see
+  server/utils/payments/actions.js) and every call below goes through this one function.
+
+  Returns undefined when there is nothing to send, so an ordinary payment's calls are exactly what
+  they were before connected accounts existed.
+*/
+export const requestOptions = ({ connectedAccount, idempotencyKey } = {}) => {
+  const options = {
+    ...(idempotencyKey ? { idempotencyKey } : {}),
+    ...(connectedAccount ? { stripeAccount: connectedAccount } : {}),
+  };
+  return Object.keys(options).length ? options : undefined;
 };
 
-export const createIntent = async ({ amount, currency, description, metadata, captureMethod, customerEmail, idempotencyKey }) => {
+/*
+  What a browser needs to confirm a payment. For a payment on a connected account that includes the
+  account: Stripe.js has to be initialised with `{ stripeAccount }` or it cannot see the intent at
+  all — see public/components/PaymentForm.js and its `connected-account` attribute.
+*/
+export const clientConfig = async ({ connectedAccount } = {}) => {
+  const { publishableKey } = await credentials();
+  if(!publishableKey) return [{ code: 409, msg: 'Stripe is not connected yet' }, null];
+  return [null, { publishableKey, ...(connectedAccount ? { stripeAccount: connectedAccount } : {}) }];
+};
+
+export const createIntent = async ({ amount, currency, description, metadata, captureMethod, customerEmail, idempotencyKey, connectedAccount, applicationFee }) => {
   const [error, stripe] = await withClient();
   if(error) return [error, null];
 
@@ -239,6 +264,12 @@ export const createIntent = async ({ amount, currency, description, metadata, ca
     const intent = await stripe.paymentIntents.create({
       amount,
       currency,
+      /*
+        The site's cut of a payment taken on a connected account. Stripe moves it to the platform's
+        balance when the charge succeeds and takes its own processing fee from the connected account.
+        Zero is not sent: Stripe requires a positive amount, and no fee means no parameter.
+      */
+      ...(connectedAccount && applicationFee > 0 ? { application_fee_amount: applicationFee } : {}),
       capture_method: captureMethod === 'manual' ? 'manual' : 'automatic',
       description: description || undefined,
       receipt_email: customerEmail || undefined,
@@ -251,7 +282,7 @@ export const createIntent = async ({ amount, currency, description, metadata, ca
         Object.entries(metadata || {}).map(([key, value]) => [key, String(value)]),
       ),
       automatic_payment_methods: { enabled: true },
-    }, idempotencyKey ? { idempotencyKey } : undefined);
+    }, requestOptions({ idempotencyKey, connectedAccount }));
 
     return [null, { ...fromIntent(intent), clientSecret: intent.client_secret }];
   } catch(err) {
@@ -259,19 +290,19 @@ export const createIntent = async ({ amount, currency, description, metadata, ca
   }
 };
 
-export const retrieveIntent = async ref => {
+export const retrieveIntent = async (ref, { connectedAccount } = {}) => {
   const [error, stripe] = await withClient();
   if(error) return [error, null];
 
   try {
-    const intent = await stripe.paymentIntents.retrieve(ref, { expand: ['latest_charge'] });
+    const intent = await stripe.paymentIntents.retrieve(ref, { expand: ['latest_charge'] }, requestOptions({ connectedAccount }));
     return [null, { ...fromIntent(intent), clientSecret: intent.client_secret }];
   } catch(err) {
     return failure(err);
   }
 };
 
-export const capture = async (ref, { amount } = {}) => {
+export const capture = async (ref, { amount, connectedAccount } = {}) => {
   const [error, stripe] = await withClient();
   if(error) return [error, null];
 
@@ -279,19 +310,19 @@ export const capture = async (ref, { amount } = {}) => {
     const intent = await stripe.paymentIntents.capture(ref, {
       ...(amount ? { amount_to_capture: amount } : {}),
       expand: ['latest_charge'],
-    });
+    }, requestOptions({ connectedAccount }));
     return [null, fromIntent(intent)];
   } catch(err) {
     return failure(err);
   }
 };
 
-export const cancel = async ref => {
+export const cancel = async (ref, { connectedAccount } = {}) => {
   const [error, stripe] = await withClient();
   if(error) return [error, null];
 
   try {
-    const intent = await stripe.paymentIntents.cancel(ref);
+    const intent = await stripe.paymentIntents.cancel(ref, {}, requestOptions({ connectedAccount }));
     return [null, fromIntent(intent)];
   } catch(err) {
     return failure(err);
@@ -317,17 +348,33 @@ const refundFrom = entry => ({
   reason: entry.reason || entry.metadata?.reason || null,
 });
 
-export const refund = async (ref, { amount, reason } = {}) => {
+/*
+  The body of a refund request.
+
+  `refund_application_fee` only exists for a charge on a connected account, and only means something
+  there: Stripe's own default is to keep the site's fee and take the whole refund out of the
+  connected account's balance. It is sent only when the caller decided either way (see
+  `refundOptionsFor` in server/utils/payments/actions.js), so an ordinary refund is the same request
+  it always was. With it, Stripe gives back the fee in proportion to the refund — all of it for a full
+  refund.
+*/
+export const refundParams = (ref, { amount, reason, refundApplicationFee } = {}) => ({
+  payment_intent: ref,
+  ...(amount ? { amount } : {}),
+  ...(STRIPE_REASONS.has(reason) ? { reason } : {}),
+  ...(reason && !STRIPE_REASONS.has(reason) ? { metadata: { reason: String(reason) } } : {}),
+  ...(typeof refundApplicationFee === 'boolean' ? { refund_application_fee: refundApplicationFee } : {}),
+});
+
+export const refund = async (ref, { amount, reason, connectedAccount, refundApplicationFee } = {}) => {
   const [error, stripe] = await withClient();
   if(error) return [error, null];
 
   try {
-    const created = await stripe.refunds.create({
-      payment_intent: ref,
-      ...(amount ? { amount } : {}),
-      ...(STRIPE_REASONS.has(reason) ? { reason } : {}),
-      ...(reason && !STRIPE_REASONS.has(reason) ? { metadata: { reason: String(reason) } } : {}),
-    });
+    const created = await stripe.refunds.create(
+      refundParams(ref, { amount, reason, refundApplicationFee: connectedAccount ? refundApplicationFee : undefined }),
+      requestOptions({ connectedAccount }),
+    );
 
     return [null, { ...refundFrom(created), reason: reason || null }];
   } catch(err) {
@@ -343,12 +390,12 @@ export const refund = async (ref, { amount, reason } = {}) => {
   An event that says "100 has been refunded" cannot be turned into a refund row without asking who
   refunded it — found by testing, when a refund reached the webhook and was recorded as nothing.
 */
-export const listRefunds = async ref => {
+export const listRefunds = async (ref, { connectedAccount } = {}) => {
   const [error, stripe] = await withClient();
   if(error) return [error, null];
 
   try {
-    const listed = await stripe.refunds.list({ payment_intent: ref, limit: 100 });
+    const listed = await stripe.refunds.list({ payment_intent: ref, limit: 100 }, requestOptions({ connectedAccount }));
     return [null, listed.data.map(refundFrom)];
   } catch(err) {
     return failure(err);
@@ -383,8 +430,14 @@ export const verifyEvent = async ({ payload, signature }) => {
   Anything not listed comes back as `ignored`, which is still recorded and still answered with a
   200 — telling Stripe an event failed makes it retry an event nothing was ever going to do
   anything with, for days.
+
+  `connectedAccount` is the account an event happened on: Stripe sets `account` on every event that
+  comes from a connected account and leaves it off the platform's own. The webhook only applies an
+  event to a payment made on that same account — see server/utils/webhooks/receive.js.
 */
-export const interpretEvent = event => {
+export const interpretEvent = event => ({ ...interpret(event), connectedAccount: event.account || null });
+
+const interpret = event => {
   const object = event.data?.object || {};
 
   switch(event.type){

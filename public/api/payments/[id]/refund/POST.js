@@ -10,6 +10,9 @@ import { gate } from '../../../../../server/utils/permissions/gate.js';
 
   `issuedBy` is the signed-in user rather than anything in the body. Who refunded what is exactly
   the field nobody should be able to set on their own behalf.
+
+  `refundApplicationFee` only matters for a payment on a connected account that took a fee: true (the
+  default when it is left out) gives the site's fee back in proportion, false keeps it.
 */
 export default async (request, response) => {
   const [gateError, session] = await gate(request, 'payments:refund');
@@ -21,6 +24,7 @@ export default async (request, response) => {
     amount: amount === undefined || amount === null || amount === '' ? undefined : Number(amount),
     reason: request.body?.reason || null,
     issuedBy: session.user.id,
+    refundApplicationFee: request.body?.refundApplicationFee ?? undefined,
   });
   if(error) return response.status(error.code).json({ error: error.msg });
 

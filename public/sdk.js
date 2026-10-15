@@ -55,7 +55,7 @@ export const capturePayment = (id, { amount } = {}) => request(`/payments/${id}/
 
 export const cancelPayment = id => request(`/payments/${id}/cancel`, json('POST'));
 
-export const refundPayment = (id, { amount, reason } = {}) => request(`/payments/${id}/refund`, json('POST', { amount, reason }));
+export const refundPayment = (id, { amount, reason, refundApplicationFee } = {}) => request(`/payments/${id}/refund`, json('POST', { amount, reason, refundApplicationFee }));
 
 /*
   Re-reads the payment from the processor. For the case where a webhook has not arrived — see the

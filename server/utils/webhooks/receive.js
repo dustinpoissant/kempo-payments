@@ -69,6 +69,36 @@ export const receiveWebhook = async ({ provider: providerName, payload, signatur
   const [verifyError, event] = await provider.verifyEvent({ payload, signature });
   if(verifyError) return [verifyError, null];
 
+  return applyEvent(provider, event);
+};
+
+/*
+  **No signature check happens here. Only kempo-payouts should call this.**
+
+  Events about payments on connected accounts — Stripe Connect direct charges — are not sent to
+  this extension's endpoint. Stripe delivers them to a separate *Connect* endpoint, signed with that
+  endpoint's own secret, and kempo-payouts owns it. Once kempo-payouts has verified an event against
+  that secret, it hands the event here so the payment row is updated by the same code, with the
+  same idempotency and the same hooks, as every other payment — rather than payouts keeping a second
+  copy of payment state.
+
+  Whatever reaches this function is believed. Anything that passes a request body into it without
+  verifying the signature first lets anybody on the internet mark any payment paid. It is in the SDK
+  because an extension needs it, not because a route should.
+
+  One check does remain: an event from a connected account is only applied to a payment made on
+  that same account (see `applyEvent`), so a verified event cannot be pointed at somebody else's
+  payment.
+*/
+export const receiveVerifiedEvent = async ({ provider: providerName = 'stripe', event } = {}) => {
+  const [providerError, provider] = getProvider(providerName);
+  if(providerError) return [providerError, null];
+  if(!event?.id || !event?.type) return [{ code: 400, msg: 'An event needs an id and a type' }, null];
+
+  return applyEvent(provider, event);
+};
+
+const applyEvent = async (provider, event) => {
   const [claimError, claimed] = await claimEvent({
     provider: provider.name,
     eventId: event.id,
@@ -96,6 +126,17 @@ export const receiveWebhook = async ({ provider: providerName, payload, signatur
     return [null, { handled: false, type: event.type, unmatched: true }];
   }
 
+  /*
+    An event is only about a payment if both happened on the same account: a connected account's
+    event for that account's payment, the platform's own event for the platform's. Anything else is
+    recorded and left alone — an event arriving on the wrong endpoint, or from an account claiming a
+    payment that is not its own.
+  */
+  if((interpreted.connectedAccount || null) !== (payment.connectedAccount || null)){
+    await finish(claimed.id, { error: 'The event came from a different account than the payment was made on' });
+    return [null, { handled: false, type: event.type, unmatched: true }];
+  }
+
   let applyError = null;
 
   if(interpreted.kind === 'payment'){
@@ -113,7 +154,7 @@ export const receiveWebhook = async ({ provider: providerName, payload, signatur
       record otherwise. Without this such a refund was "handled" as a no-op and never appeared.
     */
     if(!refunds.length && provider.listRefunds){
-      [applyError, refunds] = await provider.listRefunds(payment.providerRef);
+      [applyError, refunds] = await provider.listRefunds(payment.providerRef, { connectedAccount: payment.connectedAccount });
     }
 
     if(!applyError) [applyError] = await applyRefunds(payment, refunds);
