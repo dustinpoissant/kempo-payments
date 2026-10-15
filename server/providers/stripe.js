@@ -366,14 +366,14 @@ export const refundParams = (ref, { amount, reason, refundApplicationFee } = {})
   ...(typeof refundApplicationFee === 'boolean' ? { refund_application_fee: refundApplicationFee } : {}),
 });
 
-export const refund = async (ref, { amount, reason, connectedAccount, refundApplicationFee } = {}) => {
+export const refund = async (ref, { amount, reason, connectedAccount, refundApplicationFee, idempotencyKey } = {}) => {
   const [error, stripe] = await withClient();
   if(error) return [error, null];
 
   try {
     const created = await stripe.refunds.create(
       refundParams(ref, { amount, reason, refundApplicationFee: connectedAccount ? refundApplicationFee : undefined }),
-      requestOptions({ connectedAccount }),
+      requestOptions({ connectedAccount, idempotencyKey }),
     );
 
     return [null, { ...refundFrom(created), reason: reason || null }];

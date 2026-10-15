@@ -140,6 +140,10 @@ const tests = {
     if(bad?.code !== 400) return fail(`a non-boolean choice gave ${JSON.stringify(bad)}`);
     const [reached] = await refundPayment(payment.id, { amount: 100, refundApplicationFee: false });
     if(!/not connected/i.test(reached?.msg || '')) return fail(`a valid refund did not reach the processor: ${JSON.stringify(reached)}`);
+    const [badKey] = await refundPayment(payment.id, { amount: 100, idempotencyKey: 42 });
+    if(badKey?.code !== 400) return fail(`a key that is not text gave ${JSON.stringify(badKey)}`);
+    const [keyed] = await refundPayment(payment.id, { amount: 100, idempotencyKey: 'refund-1' });
+    if(!/not connected/i.test(keyed?.msg || '')) return fail(`a refund with a key did not reach the processor: ${JSON.stringify(keyed)}`);
     await purge();
     pass('');
   },

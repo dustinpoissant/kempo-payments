@@ -88,9 +88,13 @@ try {
   const [keepError] = await payments.refundPayment(created.payment.id, { amount: 200, refundApplicationFee: false });
   const afterSecond = await feeFor(created.payment, account);
   check('refundApplicationFee: false keeps the fee', !keepError && afterSecond?.amount_refunded === 20, keepError?.msg || `fee refunded ${afterSecond?.amount_refunded}`);
+  const key = `connect-test-mode-${Date.now()}`;
+  const [firstKeyed] = await payments.refundPayment(created.payment.id, { amount: 100, idempotencyKey: key });
+  const [secondKeyed] = await payments.refundPayment(created.payment.id, { amount: 100, idempotencyKey: key });
   const [, resynced] = await payments.syncPayment(created.payment.id);
   const [, refunds] = await payments.listRefunds(created.payment.id);
-  check('listRefunds (through sync) reads both refunds from the account', resynced?.payment.amountRefunded === 600 && refunds?.length === 2, `refunded ${resynced?.payment.amountRefunded} in ${refunds?.length}`);
+  check('a refund retried with the same idempotency key is made once', !firstKeyed && !secondKeyed && resynced?.payment.amountRefunded === 700, `refunded ${resynced?.payment.amountRefunded}`);
+  check('listRefunds (through sync) reads every refund from the account', refunds?.length === 3, `${refunds?.length} refunds`);
 
   // 4. Capture a held payment.
   const [, held] = await payments.createPayment({ amount: 800, currency: 'usd', connectedAccount: account, applicationFee: 30, captureMethod: 'manual' });

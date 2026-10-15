@@ -26,7 +26,7 @@ import { DEFAULTS } from '../utils/config/settings.js';
   | `retrieveIntent(ref, { connectedAccount })` | `[err, { ref, status, … }]`                      |
   | `capture(ref, { amount, connectedAccount })` | `[err, { ref, status, … }]`                     |
   | `cancel(ref, { connectedAccount })` | `[err, { ref, status, … }]`                              |
-  | `refund(ref, { amount, reason, connectedAccount, refundApplicationFee })` | `[err, { ref, amount, status, … }]` |
+  | `refund(ref, { amount, reason, connectedAccount, refundApplicationFee, idempotencyKey })` | `[err, { ref, amount, status, … }]` |
   | `listRefunds(ref, { connectedAccount })` | optional: `[err, [{ ref, amount, status, … }]]` — every refund on a payment |
   | `verifyEvent()`    | `[err, event]` — reject anything not signed by the provider               |
   | `interpretEvent()` | `{ kind: 'payment' \| 'refund' \| 'dispute' \| 'ignored', connectedAccount, … }` |

@@ -111,11 +111,18 @@ export const refundOptionsFor = (payment, { refundApplicationFee } = {}) => {
 
   For a payment on a connected account, `refundApplicationFee` decides whether the site's fee is
   returned with it — see `refundOptionsFor`.
+
+  `idempotencyKey`, when given, is sent to the processor with the refund, so a caller that retries
+  after a timeout gets the refund it already made rather than a second one. Optional, so every
+  existing caller is unchanged.
 */
-export const refundPayment = async (id, { amount, reason, issuedBy, refundApplicationFee } = {}) => {
+export const refundPayment = async (id, { amount, reason, issuedBy, refundApplicationFee, idempotencyKey } = {}) => {
   // Checked before the processor is asked: once it has refunded, a failed insert is a refund nobody recorded.
   if(hasNulByte(reason, issuedBy)){
     return [{ code: 400, msg: 'A refund reason cannot contain null characters' }, null];
+  }
+  if(idempotencyKey !== undefined && idempotencyKey !== null && (typeof idempotencyKey !== 'string' || !idempotencyKey.trim() || idempotencyKey.length > 255 || hasNulByte(idempotencyKey))){
+    return [{ code: 400, msg: 'An idempotency key is a short piece of text' }, null];
   }
   if(refundApplicationFee !== undefined && refundApplicationFee !== null && typeof refundApplicationFee !== 'boolean'){
     return [{ code: 400, msg: 'Whether to refund the application fee is true or false' }, null];
@@ -166,6 +173,7 @@ export const refundPayment = async (id, { amount, reason, issuedBy, refundApplic
     amount: requested,
     reason,
     ...refundOptionsFor(payment, { refundApplicationFee: refundApplicationFee ?? undefined }),
+    ...(idempotencyKey ? { idempotencyKey } : {}),
   });
   if(refundError) return [refundError, null];
 
