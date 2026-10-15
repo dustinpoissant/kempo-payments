@@ -303,6 +303,8 @@ const [error, { payment, clientSecret }] = await createPayment({
 - **The browser needs the account too.** `<k-pay-form connected-account="…">` initialises Stripe.js
   with `{ stripeAccount }`; without it the form loads and every confirm fails. `getClientSecret`
   returns `connectedAccount` alongside the secret for this reason.
+- **A refund can carry an `idempotencyKey`** (any payment, connected or not), sent to the processor, so
+  a retry after a timeout returns the refund already made instead of making a second one.
 - **Refunds give the site's fee back by default.** `refundPayment(id, { refundApplicationFee })`
   defaults to `true` for a payment that took a fee: the fee is returned in proportion to the refund —
   all of it on a full refund. Pass `false` to keep it, in which case the connected account pays the
@@ -353,11 +355,13 @@ STRIPE_TEST_CONNECTED_ACCOUNT=acct_… node scripts/connect-test-mode.js
 It refuses anything but test keys. It creates a payment with a fee on the account and checks the
 intent is there (and not on the platform), confirms it with a test card, syncs it, checks the site
 received the fee, refunds part with the fee (checks the fee was refunded in proportion) and part
-without (checks it was kept), reads both refunds back, captures a held payment, cancels an unpaid
+without (checks it was kept), retries a refund with the same idempotency key (checks it was made
+once), reads every refund back, captures a held payment, cancels an unpaid
 one, and finally runs a real `payment_intent.succeeded` event — read back from the account, not
 written by hand — through `receiveVerifiedEvent`. Without `STRIPE_TEST_CONNECTED_ACCOUNT` it uses the
-first connected account that can take card payments. Last run 2026-10-15: 13 of 13, on both an
-Express Dashboard account and a full Stripe Dashboard account.
+first connected account that can take card payments. Last run 2026-10-15: 14 of 14 on an Express
+Dashboard account, and 13 of 13 on a full Stripe Dashboard account before the idempotency check was
+added.
 
 Wallets on a connected account (Apple Pay in particular) need the site's domain registered **on that
 account** — Stripe's payment method domains, created with the account's `Stripe-Account` header. That

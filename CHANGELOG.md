@@ -23,6 +23,9 @@ the existing suite passes unmodified.
   sends it as the `Stripe-Account` header (and `application_fee_amount` on create). It is always read
   from the stored payment, never a caller. `clientConfig({ connectedAccount })` and `getClientSecret`
   return the account for the browser.
+- **Refunds take an optional `idempotencyKey`**, sent to the processor with the refund, so a caller that
+  retries after a timeout gets the refund it already made rather than a second one. Any payment, not
+  only a connected one.
 - **Refunds take `refundApplicationFee`**, default `true` for a payment that took a fee: the site's fee
   is given back in proportion. `false` keeps it. The admin refund form has a checkbox for it and the
   refund route accepts it.
@@ -40,8 +43,8 @@ the existing suite passes unmodified.
   table. Tested from a table without them.
 - **`scripts/connect-test-mode.js`**, the manual procedure against Stripe's test mode: create with a
   fee, confirm, sync, fee received, refund with and without the fee, capture, cancel, client secret,
-  and a real event through `receiveVerifiedEvent`. 13 of 13 on 2026-10-15, on an Express Dashboard and
-  a full Stripe Dashboard account. `npm test` still never calls Stripe.
+  a refund retried with the same key made once, and a real event through `receiveVerifiedEvent`. 14 of
+  14 on 2026-10-15. `npm test` still never calls Stripe.
 
 ### Added
 
