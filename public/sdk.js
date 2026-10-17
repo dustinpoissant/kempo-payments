@@ -65,6 +65,9 @@ export const syncPayment = id => request(`/payments/${id}/sync`, json('POST'));
 
 export const getSummary = () => request('/summary');
 
+/* The processor's disputes: `status` is `open`, `closed` or `all`. Each says what it is about, when the answer is due and where to answer it. */
+export const listDisputes = ({ status } = {}) => request(`/disputes${query({ status })}`);
+
 export const listProviders = () => request('/providers');
 
 export const getSettings = () => request('/settings');

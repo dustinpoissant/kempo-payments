@@ -175,6 +175,32 @@ included) does not reach them at all. Their text colour uses the `style` option 
 mechanism for exactly this element family — because `appearance.variables.colorText` doesn't reach
 them either, the same silent no-effect failure one layer deeper.
 
+### On a page that places the order first (a checkout)
+
+A checkout wants the card on the same page as everything else, but the payment does not exist until the
+customer presses the button, so there is no client secret to mount with. Add `deferred`:
+
+```html
+<k-pay-form deferred></k-pay-form>
+```
+
+The card fields mount on their own. A deferred form has no button of its own, no Express Checkout (wallets
+need the payment to exist) and no ZIP box (set `postalCode` on the element from the page's own address
+field). The page runs the sequence:
+
+```javascript
+const form = document.querySelector('k-pay-form');
+if(!form.complete) return showError('Enter your card details');          // number, expiry and CVC all valid
+const [error, payment] = await createThePayment();                        // your own server call
+const { error: declined, paymentIntent } = await form.confirm({ clientSecret: payment.clientSecret });
+```
+
+`confirm()` resolves with what the processor said (`{ error, paymentIntent }`) and fires the usual events
+as well; after a decline the form is ready to be confirmed again with the same or a new secret.
+`card-change` fires, with `detail.complete`, as the card becomes complete or stops being. A form with a
+`client-secret` works exactly as before. Do not host a deferred form inside another `<form>` of
+its own: it renders a plain `<div>` so that the page's form can hold it.
+
 > **Do not put `<k-pay-form>` inside a shadow root.** Stripe's fields do not mount in one — they
 > reserve their height and render nothing, with no error anywhere. If a checkout shows an empty box
 > where a card field should be, this is why: something in the chain of custom elements above it is
@@ -367,6 +393,16 @@ Wallets on a connected account (Apple Pay in particular) need the site's domain 
 account** — Stripe's payment method domains, created with the account's `Stripe-Account` header. That
 is kempo-payouts' job when it onboards an account, not something this extension can do.
 
+## Disputes
+
+**Admin → Payments → Disputes** lists the disputes (chargebacks) on the processor's account: the soonest deadline first, with whether each needs a response or is being decided, the amount, why the customer says they disputed it, the sale it was about when this site made it, and a button that opens that dispute in Stripe's dashboard (the test or the live one, by the key).
+
+It is read-only on purpose. A dispute is answered where the evidence form, the file uploads and the deadline emails already are, and evidence can only be sent once, so a second form here would only be a way to get it wrong. The list is read from the processor each time rather than copied into a table, so it is never behind; what this site keeps is the yes/no `disputed` flag on the payment (set by the webhook), which other extensions react to through `payment:disputed`.
+
+- Needs a Stripe key that can read disputes (a full secret key can; a restricted one needs **Disputes: read**).
+- Shows the site's own account. A payment taken on a connected account (kempo-payouts) has its dispute on that account.
+- A test dispute to look at: pay with the test card `4000 0000 0000 0259`.
+
 ## When an event cannot be applied
 
 The webhook marks an event handled only **after** it has been applied. If applying it fails — the
@@ -441,6 +477,7 @@ Served under the extension's public scope, `/payments/`.
 | `POST /payments/api/payments/:id/refund` | `payments:refund` | |
 | `POST /payments/api/payments/:id/sync` | `payments:view` | Re-read from the processor |
 | `GET /payments/api/summary` | `payments:view` | Counts and totals per currency |
+| `GET /payments/api/disputes?status=open\|closed\|all` | `payments:view` | The processor's disputes, read live |
 | `GET`/`PUT /payments/api/settings` | `payments:settings` | Never returns a credential, only whether one is set |
 | `POST /payments/api/webhooks/:provider` | signature | The processor's own endpoint |
 
@@ -472,8 +509,8 @@ rest of the extension has one vocabulary rather than one per processor.
 - **Payouts, balances and reconciliation.** The processor's dashboard is the ledger. Paying *other
   users* — onboarding their accounts, a fee policy, a page for them — is kempo-payouts; this extension
   only takes the payment on their account.
-- **Answering disputes.** They are flagged here and answered there — evidence submission is a
-  processor-specific workflow with deadlines attached.
+- **Answering disputes.** They are flagged and listed here (**Payments → Disputes**) and answered in the
+  processor's dashboard — evidence submission is a processor-specific workflow with deadlines attached.
 - **Tax.** That is `kempo-tax`, deliberately separate: "compute what is owed" and "move money" are
   orthogonal, and merging them would stop anybody swapping in their own tax calculator.
 - **A checkout.** No cart, no order, no idea what is being bought. That is `kempo-commerce`.

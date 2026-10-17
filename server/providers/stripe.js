@@ -403,6 +403,61 @@ export const listRefunds = async (ref, { connectedAccount } = {}) => {
 };
 
 /*
+  Disputes (chargebacks), in kempo's vocabulary rather than Stripe's: a status of `needs_response`,
+  `under_review`, `won`, `lost` or `closed`. Stripe's "warning" statuses are early inquiries, not yet a
+  chargeback, so they map to the same words with `inquiry: true`.
+
+  `open` is whether the money is still in question: the merchant has to answer, or the bank is deciding.
+  `dueBy` is when the evidence has to be in; it is empty once the time has passed or nothing is asked.
+*/
+const DISPUTE_STATUS = {
+  needs_response: 'needs_response',
+  warning_needs_response: 'needs_response',
+  under_review: 'under_review',
+  warning_under_review: 'under_review',
+  won: 'won',
+  lost: 'lost',
+  warning_closed: 'closed',
+  charge_refunded: 'closed',
+};
+
+export const fromDispute = dispute => {
+  const evidence = dispute.evidence_details ?? {};
+  const status = DISPUTE_STATUS[dispute.status] ?? 'needs_response';
+  return {
+    ref: dispute.id,
+    paymentRef: typeof dispute.payment_intent === 'string' ? dispute.payment_intent : dispute.payment_intent?.id ?? null,
+    amount: dispute.amount,
+    currency: dispute.currency,
+    reason: dispute.reason || null,
+    status,
+    inquiry: String(dispute.status).startsWith('warning_'),
+    open: status === 'needs_response' || status === 'under_review',
+    dueBy: evidence.due_by ? new Date(evidence.due_by * 1000).toISOString() : null,
+    pastDue: Boolean(evidence.past_due),
+    hasEvidence: Boolean(evidence.has_evidence),
+    created: new Date(dispute.created * 1000).toISOString(),
+    livemode: Boolean(dispute.livemode),
+  };
+};
+
+/* The site's own account's disputes, newest first, up to `limit`. A payment taken on a connected account has its dispute there. */
+export const listDisputes = async ({ limit = 200 } = {}) => {
+  const [error, stripe] = await withClient();
+  if(error) return [error, null];
+
+  try {
+    const found = await stripe.disputes.list({ limit: 100 }).autoPagingToArray({ limit });
+    return [null, found.map(fromDispute)];
+  } catch(err) {
+    return failure(err);
+  }
+};
+
+/* Where the dispute can be answered. Test and live accounts have different dashboards. */
+export const disputeUrl = dispute => `https://dashboard.stripe.com/${dispute.livemode ? '' : 'test/'}disputes/${dispute.ref}`;
+
+/*
   Verifies a webhook against the signing secret and returns the parsed event.
 
   `payload` must be the exact bytes that arrived. Stripe signs the raw body, so a payload that has

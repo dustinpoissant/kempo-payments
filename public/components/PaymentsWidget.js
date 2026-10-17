@@ -25,7 +25,7 @@ export default class PaymentsWidget extends DashboardWidget {
     super();
     this.currencies = [];
     this.disputed = 0;
-    this.cta = { label: 'View payments', icon: 'credit_card', href: '/admin/extension/kempo-payments/' };
+    this.cta = { label: 'View payments', iconSrc: '/admin/extension/kempo-payments/icons/credit-card.svg', href: '/admin/extension/kempo-payments/' };
   }
 
   /*

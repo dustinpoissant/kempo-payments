@@ -8,7 +8,7 @@
       "key": "summary",
       "title": "Payments",
       "description": "Money captured and refunded, and how many payments there have been.",
-      "icon": "credit_card",
+      "iconSrc": "/admin/extension/kempo-payments/icons/credit-card.svg",
       "element": "k-pay-widget",
       "module": "/payments/components/PaymentsWidget.js",
       "defaultWidth": 2,

@@ -28,6 +28,8 @@ import { DEFAULTS } from '../utils/config/settings.js';
   | `cancel(ref, { connectedAccount })` | `[err, { ref, status, … }]`                              |
   | `refund(ref, { amount, reason, connectedAccount, refundApplicationFee, idempotencyKey })` | `[err, { ref, amount, status, … }]` |
   | `listRefunds(ref, { connectedAccount })` | optional: `[err, [{ ref, amount, status, … }]]` — every refund on a payment |
+  | `listDisputes({ limit })` | optional: `[err, [{ ref, paymentRef, amount, currency, reason, status, open, dueBy, … }]]` — chargebacks on the site's own account |
+  | `disputeUrl(dispute)` | optional: where that dispute can be answered                           |
   | `verifyEvent()`    | `[err, event]` — reject anything not signed by the provider               |
   | `interpretEvent()` | `{ kind: 'payment' \| 'refund' \| 'dispute' \| 'ignored', connectedAccount, … }` |
 

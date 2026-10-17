@@ -4,6 +4,17 @@ All notable changes to `kempo-payments` are documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **A Disputes page** (**Admin → Payments → Disputes**): the processor's chargebacks, open ones first with the soonest deadline at the top, each with its status, amount, the customer's reason in plain words, the sale it was about, and a button to answer it in Stripe. Read live from the processor, read-only (evidence is sent from the dashboard), behind `payments:view`. New `GET /payments/api/disputes`, `listDisputes` in the browser SDK, and `listDisputes` / `disputeUrl` on the provider contract.
+- A payment can be opened from a link: `/admin/extension/kempo-payments/?payment=<id>`.
+- **`<k-pay-form deferred>`**, for a checkout that puts the card on the same page as everything else. The card fields mount with no payment yet, `form.complete` says whether the number, expiry and CVC are valid, and `form.confirm({ clientSecret })` charges the card once the page has made the payment, resolving with `{ error, paymentIntent }` and firing the usual events. A deferred form has no button, no Express Checkout and no ZIP box of its own, and renders a `<div>` rather than a `<form>` so a page's own form can hold it. `card-change` fires as the card becomes complete. A form with a `client-secret` is unchanged. Needs a release that carries this (a minor) before kempo-commerce can ask for it.
+
+### Changed
+
+- **The Disputes menu icon ships with it** (`admin/icons/gavel.svg`), used by `icon-src`, instead of coming from kempo's shared set. The card glyph stays a name: the dashboard widget, which only takes icon names, uses it.
+- Its menu entry is in the new **Payments** group, first (priority 79), instead of Commerce.
+
 To be released as **0.2.0** (a minor), and carrying everything below in this section: the
 connected-account support and the two earlier unreleased changes (`payment:refunding`, and
 `payment:failed` on every decline). Committed locally; not pushed or published.

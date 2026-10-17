@@ -71,6 +71,25 @@ import { getConfig } from '/payments/sdk.js';
   The value is the `connectedAccount` on the payment `createPayment` returned (or that
   `getClientSecret` returns).
 
+  **On a page that places an order first (a checkout)** the payment does not exist until the customer
+  presses the button, so there is no client secret to mount with. Use `deferred`: the card fields mount
+  on their own, there is no button of its own and no express checkout, and the page confirms when it has
+  made the payment:
+
+  ```html
+  <k-pay-form deferred></k-pay-form>
+  ```
+
+  ```javascript
+  if(!form.complete) return showError('Enter your card details');
+  const [error, payment] = await createThePayment();          // the page's own server call
+  const { error: declined, paymentIntent } = await form.confirm({ clientSecret: payment.clientSecret });
+  ```
+
+  `complete` is true once the number, expiry and CVC are all filled in and valid, and `card-change` fires
+  as that changes. `confirm()` resolves with what the processor said, and fires the events below as well.
+  The ZIP / postal field is the page's to supply in this mode: set `postalCode` on the element.
+
   What it emits, and nothing it emits should be trusted as proof of payment:
 
   | Event                | When                                                       |
@@ -261,6 +280,7 @@ export default class PaymentForm extends LightComponent {
     connectedAccount: { type: String, attribute: 'connected-account' },
     returnUrl: { type: String, attribute: 'return-url' },
     submitLabel: { type: String, attribute: 'submit-label' },
+    deferred: { type: Boolean },
     phase: { type: String, state: true },
     message: { type: String, state: true },
     fieldError: { type: String, state: true },
@@ -274,6 +294,7 @@ export default class PaymentForm extends LightComponent {
   #themeWatchers = [];
   #fields = {};
   #fieldErrors = { number: '', expiry: '', cvc: '' };
+  #fieldsComplete = { number: false, expiry: false, cvc: false };
 
   constructor(){
     super();
@@ -288,6 +309,7 @@ export default class PaymentForm extends LightComponent {
     */
     this.returnUrl = window.location.href;
     this.submitLabel = 'Pay';
+    this.deferred = false;
     this.phase = 'idle';
     this.message = '';
     this.fieldError = '';
@@ -355,8 +377,9 @@ export default class PaymentForm extends LightComponent {
   */
 
   async #mount(){
-    if(!this.clientSecret || this.#mountedFor === this.clientSecret) return;
-    this.#mountedFor = this.clientSecret;
+    const mountKey = this.deferred ? 'deferred' : this.clientSecret;
+    if(!mountKey || this.#mountedFor === mountKey) return;
+    this.#mountedFor = mountKey;
 
     const expressTarget = this.querySelector('[data-express-checkout]');
     const numberTarget = this.querySelector('[data-card-number]');
@@ -380,28 +403,36 @@ export default class PaymentForm extends LightComponent {
       this.#stripe = this.connectedAccount ? Stripe(key, { stripeAccount: this.connectedAccount }) : Stripe(key);
       const tokens = readTokens();
       const fieldStyle = buildFieldStyle(tokens);
-      this.#elements = this.#stripe.elements({ clientSecret: this.clientSecret, appearance: buildAppearance(tokens) });
+      this.#elements = this.deferred
+        ? this.#stripe.elements({ appearance: buildAppearance(tokens) })
+        : this.#stripe.elements({ clientSecret: this.clientSecret, appearance: buildAppearance(tokens) });
 
-      const expressCheckout = this.#elements.create('expressCheckout');
-      expressCheckout.mount(expressTarget);
-      expressCheckout.on('ready', ({ availablePaymentMethods }) => {
-        this.expressAvailable = !!availablePaymentMethods && Object.keys(availablePaymentMethods).length > 0;
-      });
-      // Fired by a click on whichever wallet button the customer chose. The element has already
-      // collected everything it needs by this point — confirming is the whole handler.
-      expressCheckout.on('confirm', async () => {
-        const { error, paymentIntent } = await this.#stripe.confirmPayment({
-          elements: this.#elements,
-          confirmParams: { return_url: this.returnUrl },
-          redirect: 'if_required',
+      /* Wallets need the payment to exist, so a deferred form has none. */
+      if(!this.deferred){
+        const expressCheckout = this.#elements.create('expressCheckout');
+        expressCheckout.mount(expressTarget);
+        expressCheckout.on('ready', ({ availablePaymentMethods }) => {
+          this.expressAvailable = !!availablePaymentMethods && Object.keys(availablePaymentMethods).length > 0;
         });
-        this.#finish(error, paymentIntent);
-      });
-      this.#fields.expressCheckout = expressCheckout;
+        // Fired by a click on whichever wallet button the customer chose. The element has already
+        // collected everything it needs by this point — confirming is the whole handler.
+        expressCheckout.on('confirm', async () => {
+          const { error, paymentIntent } = await this.#stripe.confirmPayment({
+            elements: this.#elements,
+            confirmParams: { return_url: this.returnUrl },
+            redirect: 'if_required',
+          });
+          this.#finish(error, paymentIntent);
+        });
+        this.#fields.expressCheckout = expressCheckout;
+      }
 
       const onFieldChange = (field, event) => {
         this.#fieldErrors[field] = event.error?.message || '';
         this.fieldError = Object.values(this.#fieldErrors).find(Boolean) || '';
+        const was = this.complete;
+        this.#fieldsComplete[field] = Boolean(event.complete);
+        if(was !== this.complete) this.dispatchEvent(new CustomEvent('card-change', { detail: { complete: this.complete }, bubbles: true }));
       };
 
       const cardNumber = this.#elements.create('cardNumber', { showIcon: true, style: fieldStyle });
@@ -434,21 +465,37 @@ export default class PaymentForm extends LightComponent {
     Confirming
   */
 
-  submit = async event => {
-    event?.preventDefault();
-    if(this.phase !== 'ready') return;
+  /* True once the card number, expiry and CVC are all filled in and valid. */
+  get complete(){
+    return Object.values(this.#fieldsComplete).every(Boolean);
+  }
+
+  /*
+    Charges the card against a payment that exists. A form with a `client-secret` does this itself when
+    its button is pressed; a `deferred` one is told, with the secret of the payment the page just made.
+    Resolves with { error, paymentIntent } as the processor answered, and fires the events as well.
+  */
+  confirm = async ({ clientSecret = this.clientSecret } = {}) => {
+    if(this.phase !== 'ready') return { error: { message: 'The payment form is not ready yet' }, paymentIntent: null };
 
     this.phase = 'submitting';
     this.message = '';
 
-    const { error, paymentIntent } = await this.#stripe.confirmCardPayment(this.clientSecret, {
+    const result = await this.#stripe.confirmCardPayment(clientSecret, {
       payment_method: {
         card: this.#fields.cardNumber,
         ...(this.postalCode ? { billing_details: { address: { postal_code: this.postalCode } } } : {}),
       },
     });
 
-    this.#finish(error, paymentIntent);
+    this.#finish(result.error, result.paymentIntent);
+    return result;
+  };
+
+  submit = async event => {
+    event?.preventDefault();
+    if(this.deferred) return;
+    await this.confirm();
   };
 
   #finish(error, paymentIntent){
@@ -483,13 +530,7 @@ export default class PaymentForm extends LightComponent {
       with anything the customer had already typed into it. The express-checkout wrapper is toggled
       with the `hidden` attribute rather than removed for the same reason.
     */
-    return html`
-      <div class="mb" ?hidden=${!this.expressAvailable}>
-        <div class="full" data-express-checkout></div>
-        <p class="small tc-muted ta-center my">or pay with card</p>
-      </div>
-
-      <form @submit=${this.submit}>
+    const fields = html`
         <label class="mb">
           <span class="small tc-muted d-b">Card number</span>
           <div class="k-pay-field" data-card-number></div>
@@ -504,15 +545,17 @@ export default class PaymentForm extends LightComponent {
             <span class="small tc-muted d-b">CVC</span>
             <div class="k-pay-field" data-card-cvc></div>
           </label>
-          <label class="col">
-            <span class="small tc-muted d-b">ZIP / postal</span>
-            <input
-              type="text"
-              autocomplete="postal-code"
-              .value=${this.postalCode}
-              @input=${event => { this.postalCode = event.target.value; }}
-            />
-          </label>
+          ${this.deferred ? '' : html`
+            <label class="col">
+              <span class="small tc-muted d-b">ZIP / postal</span>
+              <input
+                type="text"
+                autocomplete="postal-code"
+                .value=${this.postalCode}
+                @input=${event => { this.postalCode = event.target.value; }}
+              />
+            </label>
+          `}
         </div>
 
         ${this.fieldError ? html`<p class="tc-danger small">${this.fieldError}</p>` : ''}
@@ -523,12 +566,21 @@ export default class PaymentForm extends LightComponent {
           <p class="${this.phase === 'processing' ? 'tc-muted' : 'tc-danger'} small">${this.message}</p>
         ` : ''}
 
-        ${this.phase === 'done' ? html`<p class="tc-success">Payment complete.</p>` : html`
+        ${this.phase === 'done' ? html`<p class="tc-success">Payment complete.</p>` : this.deferred ? '' : html`
           <button type="submit" class="primary full mt" ?disabled=${this.phase !== 'ready'}>
             ${this.phase === 'submitting' ? 'Paying…' : this.submitLabel}
           </button>
         `}
-      </form>
+    `;
+
+    /* Inside a checkout there is already a form, and a form cannot hold another. */
+    return html`
+      <div class="mb" ?hidden=${!this.expressAvailable}>
+        <div class="full" data-express-checkout></div>
+        <p class="small tc-muted ta-center my">or pay with card</p>
+      </div>
+
+      ${this.deferred ? html`<div>${fields}</div>` : html`<form @submit=${this.submit}>${fields}</form>`}
     `;
   }
 }

@@ -45,7 +45,7 @@ export default class PaymentList extends ShadowComponent {
     this.offset = 0;
     this.filter = '';
     this.summary = null;
-    this.selected = '';
+    this.selected = new URLSearchParams(location.search).get('payment') ?? '';
     this.loading = true;
     this.error = '';
   }
