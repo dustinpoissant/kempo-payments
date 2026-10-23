@@ -21,6 +21,7 @@ export const DEFAULTS = {
   provider: 'stripe',
   currency: 'usd',
   captureMethod: 'automatic',
+  saveCards: true,
 };
 
 /*
@@ -58,15 +59,18 @@ export const readConfig = async () => {
     return error ? fallback : value;
   };
 
-  const [provider, currency, captureMethod] = await Promise.all([
+  const [provider, currency, captureMethod, saveCards] = await Promise.all([
     read('provider', DEFAULTS.provider),
     read('currency', DEFAULTS.currency),
     read('capture_method', DEFAULTS.captureMethod),
+    read('save_cards', DEFAULTS.saveCards),
   ]);
 
   return {
     provider: String(provider || DEFAULTS.provider),
     currency: normaliseDefaultCurrency(currency),
     captureMethod: normaliseCaptureMethod(captureMethod),
+    /* On unless it is turned off: a stored 'false' or false. */
+    saveCards: !(saveCards === false || saveCards === 'false'),
   };
 };

@@ -29,6 +29,7 @@ export const SAVEABLE = [
   'provider',
   'currency',
   'capture_method',
+  'save_cards',
   ...listProviders().flatMap(provider => provider.credentialFields.map(field => field.name)),
 ];
 
@@ -65,6 +66,11 @@ export default async (request, response) => {
       return response.status(400).json({ error: `Capture method must be one of: ${CAPTURE_METHODS.join(', ')}` });
     }
     updates.capture_method = method;
+  }
+
+  if(body.save_cards !== undefined){
+    if(typeof body.save_cards !== 'boolean') return response.status(400).json({ error: 'Saved cards must be on or off' });
+    updates.save_cards = body.save_cards;
   }
 
   for(const provider of listProviders()){

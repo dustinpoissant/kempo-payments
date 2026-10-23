@@ -73,3 +73,11 @@ export const listProviders = () => request('/providers');
 export const getSettings = () => request('/settings');
 
 export const saveSettings = body => request('/settings', json('PUT', body));
+
+/*
+  The signed-in customer's own saved cards (brand, last four, expiry), and forgetting one. A guest gets
+  a 401, which is how a payment form knows to offer "create an account to save your card".
+*/
+export const getSavedMethods = () => request('/saved-methods');
+
+export const removeSavedMethod = id => request(`/saved-methods/${encodeURIComponent(id)}`, { method: 'DELETE' });

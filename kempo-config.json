@@ -45,6 +45,12 @@
       "description": "'automatic' charges the card as soon as the customer confirms. 'manual' only authorises it, and somebody has to capture it before the hold expires"
     },
     {
+      "name": "save_cards",
+      "value": "true",
+      "type": "boolean",
+      "description": "Whether a signed-in customer can choose to save the card they pay with for next time, and pay with a saved one. Cards are kept by the processor, never on this site. Guests cannot save a card"
+    },
+    {
       "name": "stripe_publishable_key",
       "value": "",
       "type": "string",

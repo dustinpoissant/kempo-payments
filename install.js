@@ -30,11 +30,34 @@ export const COLUMNS = [
   { name: 'kempoPayment.applicationFee', sql: sql`ALTER TABLE "kempoPayment" ADD COLUMN IF NOT EXISTS "applicationFee" integer` },
 ];
 
+/*
+  Tables added after the first release. kempo creates the tables of a fresh install from the schema, but an
+  update never alters or adds to a database that already exists, so a site that installed before saved
+  cards gets `kempoPaymentCustomer` here. `IF NOT EXISTS` makes it safe on every install and update, and
+  the statement must match server/db/schema.js (a test checks it).
+*/
+export const TABLES = [
+  {
+    name: 'kempoPaymentCustomer',
+    sql: sql`CREATE TABLE IF NOT EXISTS "kempoPaymentCustomer" ("id" text PRIMARY KEY NOT NULL, "userId" text NOT NULL, "provider" text NOT NULL, "livemode" boolean DEFAULT false NOT NULL, "providerRef" text NOT NULL, "createdAt" timestamp NOT NULL)`,
+  },
+];
+
 const INDEXES = [
   sql`CREATE UNIQUE INDEX IF NOT EXISTS "kempoPayment_providerRef_idx" ON "kempoPayment" ("provider", "providerRef")`,
   sql`CREATE INDEX IF NOT EXISTS "kempoPayment_reference_idx" ON "kempoPayment" ("owner", "reference")`,
   sql`CREATE INDEX IF NOT EXISTS "kempoPaymentRefund_payment_idx" ON "kempoPaymentRefund" ("paymentId")`,
 ];
+
+export const ensureTables = async () => {
+  for(const table of TABLES){
+    try {
+      await db.execute(table.sql);
+    } catch(error) {
+      throw new Error(`[kempo-payments] Could not create the table ${table.name}: ${error.message}`);
+    }
+  }
+};
 
 export const ensureColumns = async () => {
   for(const column of COLUMNS){
@@ -47,6 +70,7 @@ export const ensureColumns = async () => {
 };
 
 export default async () => {
+  await ensureTables();
   await ensureColumns();
 
   for(const statement of INDEXES){

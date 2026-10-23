@@ -1,7 +1,8 @@
 import LightComponent from '/kempo-ui/components/LightComponent.js';
 import '/kempo-ui/components/Spinner.js';
+import '/kempo-ui/components/Icon.js';
 import { html } from '/kempo-ui/lit-all.min.js';
-import { getConfig } from '/payments/sdk.js';
+import { getConfig, getSavedMethods, removeSavedMethod } from '/payments/sdk.js';
 
 /*
   The payment form a customer actually types into, served at /payments/components/PaymentForm.js.
@@ -89,6 +90,17 @@ import { getConfig } from '/payments/sdk.js';
   `complete` is true once the number, expiry and CVC are all filled in and valid, and `card-change` fires
   as that changes. `confirm()` resolves with what the processor said, and fires the events below as well.
   The ZIP / postal field is the page's to supply in this mode: set `postalCode` on the element.
+
+  **Saved cards.** For a signed-in customer the form asks `/payments/api/saved-methods` and, when the site
+  saves cards (the `save_cards` setting) and the payment was made for a signed-in account, offers:
+
+  - a "Pay with" choice of the cards they saved earlier (brand, last four, expiry; the most recent chosen),
+    with "Use a different card", and a way to remove one. Paying with a saved card needs no card fields;
+  - a "Save this card for next time" box under the card fields, **off until they tick it**. Ticking it sends
+    `setup_future_usage` with the confirmation, and the processor keeps the card against their customer.
+  A guest is not offered either: a short line says an account can save a card for next time, linking to
+  `signup-url` (default `/register`, returning here). A payment on a connected account has no customer, so it
+  never shows any of this. The card is only ever the processor's; this site sees brand, last four and expiry.
 
   What it emits, and nothing it emits should be trusted as proof of payment:
 
@@ -273,11 +285,21 @@ const buildFieldStyle = tokens => ({
   ...(tokens.danger ? { invalid: { color: tokens.danger, iconColor: tokens.danger } } : {}),
 });
 
+const BRANDS = { visa: 'Visa', mastercard: 'Mastercard', amex: 'American Express', discover: 'Discover', diners: 'Diners Club', jcb: 'JCB', unionpay: 'UnionPay' };
+
+/* "Visa ending 4242, expires 04/28": what a saved card is called, from the little the processor tells us about it. */
+const cardLabel = method => {
+  const brand = BRANDS[method.brand] ?? (method.brand ? method.brand[0].toUpperCase() + method.brand.slice(1) : 'Card');
+  const expires = method.expMonth && method.expYear ? `, expires ${String(method.expMonth).padStart(2, '0')}/${String(method.expYear).slice(-2)}` : '';
+  return `${brand} ending ${method.last4}${expires}`;
+};
+
 export default class PaymentForm extends LightComponent {
   static properties = {
     clientSecret: { type: String, attribute: 'client-secret' },
     publishableKey: { type: String, attribute: 'publishable-key' },
     connectedAccount: { type: String, attribute: 'connected-account' },
+    signupUrl: { type: String, attribute: 'signup-url' },
     returnUrl: { type: String, attribute: 'return-url' },
     submitLabel: { type: String, attribute: 'submit-label' },
     deferred: { type: Boolean },
@@ -286,6 +308,11 @@ export default class PaymentForm extends LightComponent {
     fieldError: { type: String, state: true },
     expressAvailable: { type: Boolean, state: true },
     postalCode: { type: String, state: true },
+    guest: { type: Boolean, state: true },
+    savingEnabled: { type: Boolean, state: true },
+    methods: { type: Array, state: true },
+    choice: { type: String, state: true },
+    saveCard: { type: Boolean, state: true },
   };
 
   #stripe = null;
@@ -315,6 +342,12 @@ export default class PaymentForm extends LightComponent {
     this.fieldError = '';
     this.expressAvailable = false;
     this.postalCode = '';
+    this.signupUrl = '/register';
+    this.guest = false;
+    this.savingEnabled = false;
+    this.methods = [];
+    this.choice = 'new';
+    this.saveCard = false;
   }
 
   /*
@@ -325,6 +358,7 @@ export default class PaymentForm extends LightComponent {
     super.connectedCallback();
     injectFieldStyles();
     this.#watchTheme();
+    this.#loadSaved();
   }
 
   updated(){
@@ -371,6 +405,49 @@ export default class PaymentForm extends LightComponent {
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ['theme'] });
     this.#themeWatchers.push(() => observer.disconnect());
   }
+
+  /*
+    Saved cards
+  */
+
+  /* A guest is told to make an account; a signed-in customer gets their cards. Any other failure just means no saved cards. */
+  async #loadSaved(){
+    if(this.connectedAccount) return;
+    const [error, data] = await getSavedMethods();
+    if(error){
+      this.guest = error.code === 401;
+      return;
+    }
+    this.savingEnabled = Boolean(data.enabled);
+    this.methods = data.methods ?? [];
+    this.choice = this.methods[0]?.id ?? 'new';
+    this.#cardChanged();
+  }
+
+  /* True when a saved card is the one chosen, so no card fields need filling in. */
+  get usingSaved(){
+    return this.choice !== 'new' && this.methods.some(method => method.id === this.choice);
+  }
+
+  #cardChanged(){
+    this.dispatchEvent(new CustomEvent('card-change', { detail: { complete: this.complete }, bubbles: true }));
+  }
+
+  #chooseCard = event => {
+    this.choice = event.target.value;
+    this.#cardChanged();
+  };
+
+  #removeCard = async () => {
+    const [error] = await removeSavedMethod(this.choice);
+    if(error){
+      this.message = error.msg;
+      return;
+    }
+    this.methods = this.methods.filter(method => method.id !== this.choice);
+    this.choice = this.methods[0]?.id ?? 'new';
+    this.#cardChanged();
+  };
 
   /*
     Mounting
@@ -467,7 +544,7 @@ export default class PaymentForm extends LightComponent {
 
   /* True once the card number, expiry and CVC are all filled in and valid. */
   get complete(){
-    return Object.values(this.#fieldsComplete).every(Boolean);
+    return this.usingSaved || Object.values(this.#fieldsComplete).every(Boolean);
   }
 
   /*
@@ -481,12 +558,16 @@ export default class PaymentForm extends LightComponent {
     this.phase = 'submitting';
     this.message = '';
 
-    const result = await this.#stripe.confirmCardPayment(clientSecret, {
-      payment_method: {
-        card: this.#fields.cardNumber,
-        ...(this.postalCode ? { billing_details: { address: { postal_code: this.postalCode } } } : {}),
-      },
-    });
+    const result = await this.#stripe.confirmCardPayment(clientSecret, this.usingSaved
+      ? { payment_method: this.choice }
+      : {
+        payment_method: {
+          card: this.#fields.cardNumber,
+          ...(this.postalCode ? { billing_details: { address: { postal_code: this.postalCode } } } : {}),
+        },
+        /* Only when they ticked it, and only a payment made for a signed-in account has a customer to keep it on. */
+        ...(this.saveCard && this.savingEnabled ? { setup_future_usage: 'on_session' } : {}),
+      });
 
     this.#finish(result.error, result.paymentIntent);
     return result;
@@ -531,6 +612,20 @@ export default class PaymentForm extends LightComponent {
       with the `hidden` attribute rather than removed for the same reason.
     */
     const fields = html`
+        ${this.methods.length ? html`
+          <div class="d-f mb" style="align-items: flex-end;">
+            <label class="flex">
+              <span class="small tc-muted d-b">Pay with</span>
+              <select @change=${this.#chooseCard}>
+                ${this.methods.map(method => html`<option value=${method.id} ?selected=${this.choice === method.id}>${cardLabel(method)}</option>`)}
+                <option value="new" ?selected=${this.choice === 'new'}>Use a different card</option>
+              </select>
+            </label>
+            ${this.usingSaved ? html`<button type="button" class="no-btn tc-danger ml" style="cursor: pointer;" title="Remove this saved card" aria-label="Remove this saved card" @click=${this.#removeCard}><k-icon name="delete"></k-icon></button>` : ''}
+          </div>
+        ` : ''}
+
+        <div ?hidden=${this.usingSaved}>
         <label class="mb">
           <span class="small tc-muted d-b">Card number</span>
           <div class="k-pay-field" data-card-number></div>
@@ -560,13 +655,19 @@ export default class PaymentForm extends LightComponent {
 
         ${this.fieldError ? html`<p class="tc-danger small">${this.fieldError}</p>` : ''}
 
+        ${this.savingEnabled ? html`
+          <label class="checkbox mb"><input type="checkbox" .checked=${this.saveCard} @change=${event => { this.saveCard = event.target.checked; }}> Save this card for next time</label>
+        ` : ''}
+        ${this.guest ? html`<p class="small tc-muted mb">Want to save a card for next time? <a href=${`${this.signupUrl}?next=${encodeURIComponent(window.location.pathname + window.location.search)}`}>Create an account</a> and you can.</p>` : ''}
+        </div>
+
         ${this.phase === 'loading' ? html`<p class="tc-muted small mt"><k-spinner></k-spinner> Loading the payment form…</p>` : ''}
 
         ${this.message ? html`
           <p class="${this.phase === 'processing' ? 'tc-muted' : 'tc-danger'} small">${this.message}</p>
         ` : ''}
 
-        ${this.phase === 'done' ? html`<p class="tc-success">Payment complete.</p>` : this.deferred ? '' : html`
+        ${this.phase === 'done' ? (this.deferred ? '' : html`<p class="tc-success">Payment complete.</p>`) : this.deferred ? '' : html`
           <button type="submit" class="primary full mt" ?disabled=${this.phase !== 'ready'}>
             ${this.phase === 'submitting' ? 'Paying…' : this.submitLabel}
           </button>

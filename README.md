@@ -225,6 +225,16 @@ Use these to move the customer along. **Do not use them to fulfil an order.** A 
 the wrong moment fires nothing at all, and a browser under someone's control fires whatever they
 like.
 
+## Saved cards
+
+A signed-in customer can keep the card they pay with for next time. It is **opt-in**: a "Save this card for next time" box under the card fields, off until they tick it. Guests cannot save a card; the form tells them an account can, with a link to create one (`signup-url`, default `/register`, returning to the page).
+
+- **How:** the first payment a signed-in account makes creates a Stripe customer for it (`kempoPaymentCustomer` holds only `user -> customer id`, one per Stripe test/live mode), and every payment for that account carries the customer. Ticking the box makes the form confirm with `setup_future_usage: 'on_session'`, and Stripe keeps the card on the customer. Nothing but the brand, last four digits and expiry ever reaches this site.
+- **Paying:** the form offers "Pay with Visa ending 4242, expires 12/30" (the newest saved card, chosen) with "Use a different card", and a trash icon to forget the one shown. Paying with a saved card needs no card fields, and `complete` is true.
+- **Only the signed-in account's own cards:** `GET /payments/api/saved-methods` and `DELETE /payments/api/saved-methods/:id` take the user from the session, never the request, and a card that is not that customer's is a 404. The server SDK has `listSavedCards({ userId })` and `removeSavedCard({ userId, methodId })` for an account page.
+- **Off:** the `save_cards` setting (a switch under **Settings → Defaults → Saved cards**) turns it all off. A payment on a connected account never offers it (a customer lives on one Stripe account, a direct charge is made on another).
+- **If the customer cannot be made** (Stripe is unreachable), the payment still goes ahead, just without saved cards.
+
 ## Hooks it fires
 
 Registered by consumers in their own `kempo-config.json`, the same as any other kempo hook:
@@ -436,6 +446,7 @@ what they owe. A customer-facing checkout computes the amount on its own server 
 | `provider` | `stripe` | Which processor money goes through |
 | `currency` | `usd` | Used when the caller does not name one |
 | `capture_method` | `automatic` | See [Capture](#capture-automatic-or-manual) |
+| `save_cards` | `true` | Whether a signed-in customer can choose to save a card and pay with a saved one. See [Saved cards](#saved-cards) |
 | `stripe_publishable_key` | — | `pk_test_…` / `pk_live_…`; public by design |
 | `stripe_secret_key` | — | `sk_test_…` / `sk_live_…`; encrypted, never leaves the server |
 | `stripe_webhook_secret` | — | `whsec_…`; without it, no payment is ever confirmed |
@@ -476,6 +487,8 @@ Served under the extension's public scope, `/payments/`.
 | `POST /payments/api/payments/:id/cancel` | `payments:capture` | |
 | `POST /payments/api/payments/:id/refund` | `payments:refund` | |
 | `POST /payments/api/payments/:id/sync` | `payments:view` | Re-read from the processor |
+| `GET /payments/api/saved-methods` | session | The signed-in customer's own saved cards (brand, last four, expiry). A guest gets a 401 |
+| `DELETE /payments/api/saved-methods/:id` | session | Forget one of their own saved cards |
 | `GET /payments/api/summary` | `payments:view` | Counts and totals per currency |
 | `GET /payments/api/disputes?status=open\|closed\|all` | `payments:view` | The processor's disputes, read live |
 | `GET`/`PUT /payments/api/settings` | `payments:settings` | Never returns a credential, only whether one is set |
@@ -505,7 +518,7 @@ rest of the extension has one vocabulary rather than one per processor.
 
 - **Subscriptions and recurring billing.** A separate concern with its own state machine, dunning
   and proration. This extension is the thing one would be built on.
-- **Saved cards and stored customers.** Nothing is kept on file; every payment stands alone.
+- **Charging a saved card later, without the customer there** (subscriptions, off-session). Cards are saved for the customer to use again while they are on the site (`on_session`); recurring billing is a separate extension.
 - **Payouts, balances and reconciliation.** The processor's dashboard is the ledger. Paying *other
   users* — onboarding their accounts, a fee policy, a page for them — is kempo-payouts; this extension
   only takes the payment on their account.
@@ -541,7 +554,9 @@ because they **empty the payment tables** first: pointing one at a real site's d
 delete its payments. The webhook suite additionally needs `SETTINGS_ENCRYPTION_KEY` (any 64 hex
 characters will do) to store the signing secret it verifies against.
 
-No Stripe account is needed for any test: every provider response in the suite is a literal, and
+Saved cards also have a manual procedure against Stripe's **test mode** (the unit suite proves the table, the setting, the guest and unconfigured cases and the 401s; creating a customer and saving, listing and removing a card need Stripe): with test keys connected, sign in, open **Payments → Take a payment**, tick "Save this card for next time" and pay with `4242 4242 4242 4242`; start another payment and the card is chosen for you; pay with it; remove it with the trash icon and the list is empty again. Never run it with live keys.
+
+No Stripe account is needed for any other test: every provider response in the suite is a literal, and
 webhook events are signed with Stripe's own test-signature helper, because a suite that needs an
 account is a suite nobody runs.
 

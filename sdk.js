@@ -43,6 +43,11 @@
   refund, sync — reads the account off the payment, so nothing else changes for the caller. A
   refund gives the fee back with it unless `refundApplicationFee: false` is passed.
 
+  **Saved cards** are automatic for a signed-in customer: pass `userId` to `createPayment` and the payment carries
+  their processor customer, so `<k-pay-form>` can offer the cards they saved and a "save this card for next time"
+  choice. Guests (no `userId`) and payments on a connected account get neither. `listSavedCards({ userId })` and
+  `removeSavedCard({ userId, methodId })` are there for an account page; the `save_cards` setting turns it all off.
+
   `receiveVerifiedEvent` applies a webhook event **that the caller has already verified**. It does
   no signature check. It exists for kempo-payouts, which owns the Connect webhook endpoint; nothing
   else should call it.
@@ -52,6 +57,7 @@ export { createPayment } from './server/utils/payments/create.js';
 export { capturePayment, cancelPayment, refundPayment, refundOptionsFor, getClientSecret } from './server/utils/payments/actions.js';
 export { getPayment, getPaymentByRef, paymentsForReference, listPayments, listRefunds, summary } from './server/utils/payments/store.js';
 export { syncPayment, EVENTS } from './server/utils/payments/sync.js';
+export { listSavedCards, removeSavedCard } from './server/utils/customers/saved.js';
 export { receiveWebhook, receiveVerifiedEvent, listEvents } from './server/utils/webhooks/receive.js';
 
 export { STATUSES, FINAL, isStatus, isFinal, isAwaitingCustomer, canCapture, canCancel, refundableAmount } from './server/utils/payments/statuses.js';

@@ -22,7 +22,10 @@ import { DEFAULTS } from '../utils/config/settings.js';
   | `credentialFields` | the settings holding its credentials, in the order a screen shows them     |
   | `status()`         | `[err, { configured, mode, livemode, … }]` — is it usable, and in which mode |
   | `clientConfig({ connectedAccount })` | `[err, { publishableKey, … }]` — the part of the config a browser may hold |
-  | `createIntent({ …, connectedAccount, applicationFee })` | `[err, { ref, status, clientSecret, … }]` |
+  | `createIntent({ …, customerRef, connectedAccount, applicationFee })` | `[err, { ref, status, clientSecret, … }]` |
+  | `createCustomer({ email, userId, idempotencyKey })` | optional: `[err, { ref }]` — the processor's customer for an account, which saved cards hang off |
+  | `listSavedMethods(customerRef)` | optional: `[err, [{ id, brand, last4, expMonth, expYear }]]` — a customer's saved cards, newest first |
+  | `removeSavedMethod(customerRef, methodId)` | optional: `[err, true]` — only a card that belongs to that customer |
   | `retrieveIntent(ref, { connectedAccount })` | `[err, { ref, status, … }]`                      |
   | `capture(ref, { amount, connectedAccount })` | `[err, { ref, status, … }]`                     |
   | `cancel(ref, { connectedAccount })` | `[err, { ref, status, … }]`                              |

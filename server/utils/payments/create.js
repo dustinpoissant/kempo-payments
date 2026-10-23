@@ -4,6 +4,7 @@ import { CAPTURE_METHODS, parseCaptureMethod, readConfig } from '../config/setti
 import { insertPayment, newId } from './store.js';
 import { firePaymentCreated } from './sync.js';
 import { hasNulByte } from './text.js';
+import { ensureCustomer } from '../customers/saved.js';
 
 /*
   Starting a payment: ask the processor for an intent, write down what it said, hand back the one
@@ -98,6 +99,19 @@ export const createPayment = async ({
   */
   const id = newId();
 
+  /*
+    A signed-in customer's payment carries their processor customer, so they can pay with a card saved
+    earlier and choose to save this one. Never for a guest, and never on a connected account (a customer
+    lives on one account and that payment is made on another). If the customer cannot be made the
+    payment still goes ahead, without saved cards: that is a convenience, not a reason to refuse money.
+  */
+  let customerRef = null;
+  if(userId && !connectedAccount){
+    const [customerError, ref] = await ensureCustomer({ userId, email: customerEmail });
+    if(customerError) console.warn(`[kempo-payments] Saved cards are unavailable for this payment: ${customerError.msg}`);
+    else customerRef = ref;
+  }
+
   const [intentError, intent] = await provider.createIntent({
     amount,
     currency: code,
@@ -105,6 +119,7 @@ export const createPayment = async ({
     metadata: { ...(metadata || {}), kempoPaymentId: id, ...(owner ? { kempoOwner: owner } : {}), ...(reference ? { kempoReference: reference } : {}) },
     captureMethod: method,
     customerEmail,
+    customerRef,
     idempotencyKey: id,
     connectedAccount,
     applicationFee: fee,

@@ -256,7 +256,70 @@ export const clientConfig = async ({ connectedAccount } = {}) => {
   return [null, { publishableKey, ...(connectedAccount ? { stripeAccount: connectedAccount } : {}) }];
 };
 
-export const createIntent = async ({ amount, currency, description, metadata, captureMethod, customerEmail, idempotencyKey, connectedAccount, applicationFee }) => {
+/*
+  Saved cards. A processor customer is what a saved card hangs off, so the site makes one per signed-in
+  account (see server/utils/customers/saved.js) and puts it on that account's payments. Nothing about a
+  card but its brand, last four digits and expiry ever comes back here.
+
+  Only for the site's own account: a customer lives on one Stripe account, and a payment on a connected
+  account is made on another, so neither of these takes `connectedAccount`.
+*/
+export const createCustomer = async ({ email, userId, idempotencyKey }) => {
+  const [error, stripe] = await withClient();
+  if(error) return [error, null];
+
+  try {
+    const customer = await stripe.customers.create({
+      email: email || undefined,
+      metadata: { kempoUserId: String(userId) },
+    }, idempotencyKey ? { idempotencyKey } : undefined);
+    return [null, { ref: customer.id }];
+  } catch(err) {
+    return failure(err);
+  }
+};
+
+const methodFrom = method => ({
+  id: method.id,
+  brand: method.card?.brand || 'card',
+  last4: method.card?.last4 || '',
+  expMonth: method.card?.exp_month || null,
+  expYear: method.card?.exp_year || null,
+});
+
+/* A customer's saved cards, the most recently added first. */
+export const listSavedMethods = async customerRef => {
+  const [error, stripe] = await withClient();
+  if(error) return [error, null];
+
+  try {
+    const listed = await stripe.paymentMethods.list({ customer: customerRef, type: 'card', limit: 20 });
+    return [null, listed.data.map(methodFrom)];
+  } catch(err) {
+    return failure(err);
+  }
+};
+
+/*
+  Detaches a saved card from its customer. The card's owner is checked first: a payment method id is
+  not a secret, and detaching one that belongs to somebody else must not be possible by guessing it.
+*/
+export const removeSavedMethod = async (customerRef, methodId) => {
+  const [error, stripe] = await withClient();
+  if(error) return [error, null];
+
+  try {
+    const method = await stripe.paymentMethods.retrieve(methodId);
+    if(method.customer !== customerRef) return [{ code: 404, msg: 'That card is not saved on your account' }, null];
+    await stripe.paymentMethods.detach(methodId);
+    return [null, true];
+  } catch(err) {
+    if(err?.code === 'resource_missing') return [{ code: 404, msg: 'That card is not saved on your account' }, null];
+    return failure(err);
+  }
+};
+
+export const createIntent = async ({ amount, currency, description, metadata, captureMethod, customerEmail, customerRef, idempotencyKey, connectedAccount, applicationFee }) => {
   const [error, stripe] = await withClient();
   if(error) return [error, null];
 
@@ -264,6 +327,12 @@ export const createIntent = async ({ amount, currency, description, metadata, ca
     const intent = await stripe.paymentIntents.create({
       amount,
       currency,
+      /*
+        The customer is put on the intent so a saved card can be used to pay it and, if the customer
+        chooses to, the card they type is saved to them (the browser asks for that when it confirms).
+        Nothing is saved unless it asks.
+      */
+      ...(customerRef && !connectedAccount ? { customer: customerRef } : {}),
       /*
         The site's cut of a payment taken on a connected account. Stripe moves it to the platform's
         balance when the charge succeeds and takes its own processing fee from the connected account.

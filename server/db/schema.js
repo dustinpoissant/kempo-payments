@@ -154,3 +154,21 @@ export const kempoPaymentEvent = pgTable('kempoPaymentEvent', {
 
   createdAt: timestamp('createdAt').notNull(),
 });
+
+/*
+  Which processor customer belongs to which kempo account, so a signed-in customer's saved cards can be
+  found again. The processor holds the cards; this row holds only the id that points at them.
+
+  The key is `provider:mode:userId` because a processor keeps separate customers for test and live
+  (a test customer does not exist once the site switches to live keys) and a site can change provider.
+  Never used for a payment on a connected account: a customer lives on one account, and a direct charge
+  is made on the other one.
+*/
+export const kempoPaymentCustomer = pgTable('kempoPaymentCustomer', {
+  id: text('id').primaryKey(),
+  userId: text('userId').notNull(),
+  provider: text('provider').notNull(),
+  livemode: boolean('livemode').notNull().default(false),
+  providerRef: text('providerRef').notNull(),
+  createdAt: timestamp('createdAt').notNull(),
+});

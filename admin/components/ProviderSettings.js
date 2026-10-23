@@ -1,6 +1,7 @@
 import ShadowComponent from '/kempo-ui/components/ShadowComponent.js';
 import '/kempo-ui/components/Icon.js';
 import '/kempo-ui/components/Spinner.js';
+import '/kempo-ui/components/Toggle.js';
 import { html, css } from '/kempo-ui/lit-all.min.js';
 import { getSettings, saveSettings } from '/payments/sdk.js';
 
@@ -102,6 +103,7 @@ export default class ProviderSettings extends ShadowComponent {
       provider: this.values.provider,
       currency: this.values.currency,
       capture_method: this.values.captureMethod,
+      save_cards: this.values.saveCards !== false,
     };
 
     for(const field of this.provider?.credentialFields || []){
@@ -288,6 +290,16 @@ export default class ProviderSettings extends ShadowComponent {
           <option value="automatic" ?selected=${this.values.captureMethod === 'automatic'}>Automatic</option>
           <option value="manual" ?selected=${this.values.captureMethod === 'manual'}>Manual</option>
         </select>
+      </label>
+
+      <label class="field">
+        <span class="d-b">Saved cards</span>
+        <span class="small tc-muted d-b">
+          Lets a signed-in customer choose to save the card they pay with, and pay with a saved one next time.
+          Never on by itself: they tick "Save this card for next time". Guests cannot save a card. The card is kept by
+          the processor, and this site only sees its brand, last four digits and expiry.
+        </span>
+        <k-toggle .value=${this.values.saveCards !== false} @change=${event => this.set('saveCards', event.currentTarget.value === true)}></k-toggle>
       </label>
 
       <button class="primary" ?disabled=${this.saving} @click=${this.save}>
