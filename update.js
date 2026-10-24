@@ -14,5 +14,5 @@ import install from './install.js';
   which is what it was: a payment into the site's own account.
 */
 export default async () => {
-  await install();
+  await install({ updating: true });
 };

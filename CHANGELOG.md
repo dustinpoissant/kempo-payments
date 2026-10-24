@@ -4,6 +4,10 @@ All notable changes to `kempo-payments` are documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- **An update no longer says "Installed. Connect a processor..."**, which read as if the site had to be set up again. It says "Updated." and that the processor connection is unchanged. The install message is unchanged.
+
 ### Added
 
 - **Saved cards, opt-in, for signed-in customers.** A signed-in account's payments carry a Stripe customer (made on first use, kept in the new `kempoPaymentCustomer` table, one per test/live mode). `<k-pay-form>` shows a "Save this card for next time" box (off until ticked), then offers "Pay with Visa ending 4242, expires 12/30" with the newest saved card chosen, "Use a different card", and a trash icon to forget one. A guest is told an account can save a card, with a link to create one (`signup-url`). New `GET /payments/api/saved-methods` and `DELETE /payments/api/saved-methods/:id` (own cards only, from the session), `getSavedMethods` / `removeSavedMethod` in the browser SDK, `listSavedCards` / `removeSavedCard` in the server SDK, `createCustomer` / `listSavedMethods` / `removeSavedMethod` on the provider contract, and a `save_cards` setting (a switch under Settings) that turns it off. Never on a connected account. The update creates the table.

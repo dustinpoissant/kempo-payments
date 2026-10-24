@@ -149,6 +149,13 @@ export default !databaseReachable ? skipped(`${skipReason} — point DATABASE_UR
     pass('warns with the fix when missing, stays quiet when set');
   },
 
+  'an update says it updated, and does not tell a connected site to connect a processor again': async ({ pass, fail }) => {
+    const output = await withKey('a'.repeat(64), () => captured(() => update()));
+    if(output.log.some(line => line.includes('Installed.') || line.includes('Connect a processor'))) return fail('an update talked as if the extension were new');
+    if(!output.log.some(line => line.includes('Updated.'))) return fail('an update said nothing about having updated');
+    pass('"Updated." on an update, "Installed." only on an install');
+  },
+
   'uninstall reports how much will be lost and names every uncaptured hold': async ({ pass, fail }) => {
     await purge();
     const held = `pi_hold_${newId()}`;

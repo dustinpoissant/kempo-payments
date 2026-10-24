@@ -69,7 +69,8 @@ export const ensureColumns = async () => {
   }
 };
 
-export default async () => {
+/* `updating` is for update.js, which repeats the install: the same work, and a different last line. */
+export default async ({ updating = false } = {}) => {
   await ensureTables();
   await ensureColumns();
 
@@ -91,5 +92,7 @@ export default async () => {
     return;
   }
 
-  console.log('[kempo-payments] Installed. Connect a processor at /admin/extension/kempo-payments/ — nothing can be charged until you do.');
+  console.log(updating
+    ? '[kempo-payments] Updated. Nothing about the processor connection changed.'
+    : '[kempo-payments] Installed. Connect a processor at /admin/extension/kempo-payments/ — nothing can be charged until you do.');
 };
