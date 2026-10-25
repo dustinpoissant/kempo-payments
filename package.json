@@ -36,9 +36,9 @@
     "stripe": "^22.5.0"
   },
   "peerDependencies": {
-    "kempo": ">=4.7.0",
+    "kempo": ">=4.9.6",
     "kempo-server": ">=3.3.0",
-    "kempo-ui": ">=0.6.0"
+    "kempo-ui": ">=0.6.2"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.9",
