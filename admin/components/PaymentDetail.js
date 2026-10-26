@@ -1,6 +1,7 @@
 import ShadowComponent from '/kempo-ui/components/ShadowComponent.js';
 import '/kempo-ui/components/Icon.js';
 import '/kempo-ui/components/Spinner.js';
+import '/kempo-ui/components/Table.js';
 import '/kempo/components/Permission.js';
 import { html, css } from '/kempo-ui/lit-all.min.js';
 import {
@@ -16,6 +17,20 @@ import { formatAmount, fromMinor, statusLabel, statusTone, toMinor } from '/paym
   out of ten the log is empty, which means no webhook ever arrived, which means the endpoint or its
   signing secret is wrong — and that is visible at a glance rather than after an hour of guessing.
 */
+const refundFields = [
+  { name: 'amount', label: 'Amount', size: 140, editable: false, calculator: refund => formatAmount(refund.amount, refund.currency) },
+  { name: 'status', label: 'Status', size: 130, editable: false },
+  { name: 'reason', label: 'Reason', editable: false, calculator: refund => refund.reason || '—' },
+  { name: 'createdAt', label: 'When', size: 200, editable: false, formatter: value => new Date(value).toLocaleString() },
+];
+
+const eventFields = [
+  { name: 'type', label: 'Event', size: 300, editable: false },
+  { name: 'createdAt', label: 'Received', size: 200, editable: false, formatter: value => new Date(value).toLocaleString() },
+  { name: 'handled', label: '', size: 180, editable: false, calculator: event => event.error || (event.handledAt ? 'Handled' : 'Queued') },
+];
+
+
 export default class PaymentDetail extends ShadowComponent {
   static properties = {
     paymentId: { type: String, attribute: 'payment-id' },
@@ -53,6 +68,8 @@ export default class PaymentDetail extends ShadowComponent {
   updated(changed){
     super.updated?.(changed);
     if(changed.has('paymentId') && this.paymentId) this.load();
+    if(changed.has('refunds')) this.renderRoot.querySelector('#refundsTable')?.setData({ records: this.refunds, fields: refundFields });
+    if(changed.has('events')) this.renderRoot.querySelector('#eventsTable')?.setData({ records: this.events, fields: eventFields });
   }
 
   /*
@@ -223,18 +240,7 @@ export default class PaymentDetail extends ShadowComponent {
     }
 
     return html`
-      <table>
-        <thead><tr><th>Event</th><th>Received</th><th></th></tr></thead>
-        <tbody>
-          ${this.events.map(event => html`
-            <tr>
-              <td class="ff-mono small">${event.type}</td>
-              <td class="small tc-muted">${new Date(event.createdAt).toLocaleString()}</td>
-              <td class="small ${event.error ? 'tc-warning' : 'tc-muted'}">${event.error || (event.handledAt ? 'Handled' : 'Queued')}</td>
-            </tr>
-          `)}
-        </tbody>
-      </table>
+      <k-table id="eventsTable"></k-table>
     `;
   }
 
@@ -280,19 +286,7 @@ export default class PaymentDetail extends ShadowComponent {
 
       ${this.refunds.length ? html`
         <h3>Refunds</h3>
-        <table>
-          <thead><tr><th>Amount</th><th>Status</th><th>Reason</th><th>When</th></tr></thead>
-          <tbody>
-            ${this.refunds.map(refund => html`
-              <tr>
-                <td>${formatAmount(refund.amount, refund.currency)}</td>
-                <td class="small">${refund.status}</td>
-                <td class="small tc-muted">${refund.reason || '—'}</td>
-                <td class="small tc-muted">${new Date(refund.createdAt).toLocaleString()}</td>
-              </tr>
-            `)}
-          </tbody>
-        </table>
+        <k-table id="refundsTable"></k-table>
       ` : ''}
 
       <h3>What the processor has told us</h3>

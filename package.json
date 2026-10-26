@@ -36,7 +36,7 @@
     "stripe": "^22.5.0"
   },
   "peerDependencies": {
-    "kempo": ">=4.9.6",
+    "kempo": ">=4.9.7",
     "kempo-server": ">=3.3.0",
     "kempo-ui": ">=0.6.2"
   },

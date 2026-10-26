@@ -215,3 +215,9 @@ and was verified by hand against Stripe's test mode.
   database name ends in `_test`.
 
 [Unreleased]: https://github.com/dustinpoissant/kempo-payments
+
+## [0.4.3] - 2026-10-26
+### Changed
+- The payments list and the disputes list are kempo-ui tables. A row opens its payment, and the Stripe control opens a dispute in the processor's dashboard.
+- A payment's events and refunds are kempo-ui tables.
+- Requires kempo 4.9.7 (the admin lists use kempo-ui tables).

@@ -1,6 +1,8 @@
 import ShadowComponent from '/kempo-ui/components/ShadowComponent.js';
 import '/kempo-ui/components/Icon.js';
 import '/kempo-ui/components/Spinner.js';
+import '/kempo-ui/components/Table.js';
+import './DisputeInStripe.js';
 import { html, nothing } from '/kempo-ui/lit-all.min.js';
 import { listDisputes } from '/payments/sdk.js';
 import { formatAmount } from '/payments/utils/money.js';
@@ -11,7 +13,8 @@ import { formatAmount } from '/payments/utils/money.js';
   Read-only on purpose. A dispute is answered in the processor's own dashboard, where the evidence
   form, the file uploads and the deadline emails already live and where evidence can only be sent
   once; this page is for knowing a dispute exists, how long is left and which sale it was, and for
-  getting to the right dispute in one click.
+  getting to the right dispute in one click. A row opens the payment on this site, and the Stripe
+  button opens the dispute itself.
 */
 
 const FILTERS = [
@@ -21,11 +24,11 @@ const FILTERS = [
 ];
 
 const STATUS = {
-  needs_response: { label: 'Needs a response', tone: 'danger' },
-  under_review: { label: 'Under review by the bank', tone: 'warning' },
-  won: { label: 'Won', tone: 'success' },
-  lost: { label: 'Lost', tone: 'danger' },
-  closed: { label: 'Closed', tone: 'muted' },
+  needs_response: { label: 'Needs a response' },
+  under_review: { label: 'Under review by the bank' },
+  won: { label: 'Won' },
+  lost: { label: 'Lost' },
+  closed: { label: 'Closed' },
 };
 
 /* What the bank's reason code means, in a sentence a shop owner can act on. */
@@ -51,12 +54,26 @@ const reasonText = reason => REASONS[reason] ?? (reason ? reason.replace(/_/g, '
 /* How long is left, as words: "in 3 days", "in 5 hours", "overdue". */
 const timeLeft = dueBy => {
   const left = new Date(dueBy).getTime() - Date.now();
-  if(left <= 0) return { text: 'Overdue', tone: 'danger' };
+  if(left <= 0) return 'Overdue';
   const hours = Math.floor(left / 3600000);
-  if(hours < 24) return { text: `In ${hours} hour${hours === 1 ? '' : 's'}`, tone: 'danger' };
+  if(hours < 24) return `In ${hours} hour${hours === 1 ? '' : 's'}`;
   const days = Math.floor(hours / 24);
-  return { text: `In ${days} day${days === 1 ? '' : 's'}`, tone: days <= 3 ? 'danger' : days <= 7 ? 'warning' : 'muted' };
+  return `In ${days} day${days === 1 ? '' : 's'}`;
 };
+
+const PAYMENT = '/admin/extension/kempo-payments/';
+
+const fields = [
+  { name: 'dueBy', label: 'Due', size: 150, editable: false, calculator: dispute => dispute.open && dispute.dueBy ? `${timeLeft(dispute.dueBy)} · ${new Date(dispute.dueBy).toLocaleDateString()}` : '—' },
+  {
+    name: 'status', label: 'Status', size: 240, editable: false,
+    calculator: dispute => `${(STATUS[dispute.status] ?? STATUS.closed).label}${dispute.inquiry ? ' · An inquiry: not yet a chargeback' : ''}${dispute.open && dispute.hasEvidence ? ' · Evidence sent' : ''}${dispute.livemode ? '' : ' · Test'}`,
+  },
+  { name: 'amount', label: 'Amount', size: 120, editable: false, calculator: dispute => formatAmount(dispute.amount, dispute.currency) },
+  { name: 'reason', label: 'Why', editable: false, calculator: dispute => reasonText(dispute.reason) },
+  { name: 'sale', label: 'Sale', size: 240, editable: false, calculator: dispute => dispute.payment ? (dispute.payment.description || dispute.payment.reference || 'The payment') : 'A payment this site did not record' },
+  { name: 'created', label: 'Opened', size: 120, editable: false, formatter: value => new Date(value).toLocaleDateString() },
+];
 
 export default class DisputeList extends ShadowComponent {
   static properties = {
@@ -102,6 +119,15 @@ export default class DisputeList extends ShadowComponent {
     this.openCount = data.openCount;
   };
 
+  /* Refills the table whenever the disputes change. A row with a payment on this site opens it. */
+  updated(changed){
+    if(!changed.has('items')) return;
+    this.renderRoot.querySelector('k-table')?.setData({
+      records: this.items.map(dispute => ({ ...dispute, _url: dispute.payment ? `${PAYMENT}?payment=${encodeURIComponent(dispute.payment.id)}` : undefined })),
+      fields,
+    });
+  }
+
   /*
     Event handlers
   */
@@ -114,35 +140,6 @@ export default class DisputeList extends ShadowComponent {
   /*
     Rendering
   */
-
-  renderRow(dispute){
-    const status = STATUS[dispute.status] ?? STATUS.closed;
-    const left = dispute.open && dispute.dueBy ? timeLeft(dispute.dueBy) : null;
-    return html`
-      <tr>
-        <td>
-          ${left ? html`<strong class="tc-${left.tone}">${left.text}</strong><span class="small tc-muted d-b">${new Date(dispute.dueBy).toLocaleDateString()}</span>` : html`<span class="tc-muted">—</span>`}
-        </td>
-        <td>
-          <span class="tc-${status.tone}">${status.label}</span>
-          ${dispute.inquiry ? html`<span class="small tc-muted d-b">An inquiry: not yet a chargeback</span>` : nothing}
-          ${dispute.open && dispute.hasEvidence ? html`<span class="small tc-muted d-b">Evidence sent</span>` : nothing}
-          ${dispute.livemode ? nothing : html`<span class="small tc-muted d-b">Test</span>`}
-        </td>
-        <td>${formatAmount(dispute.amount, dispute.currency)}</td>
-        <td class="small">${reasonText(dispute.reason)}</td>
-        <td class="small">
-          ${dispute.payment
-            ? html`<a href=${`/admin/extension/kempo-payments/?payment=${encodeURIComponent(dispute.payment.id)}`}>${dispute.payment.description || dispute.payment.reference || 'The payment'}</a>`
-            : html`<span class="tc-muted">A payment this site did not record</span>`}
-        </td>
-        <td class="small tc-muted">${new Date(dispute.created).toLocaleDateString()}</td>
-        <td>
-          ${dispute.dashboardUrl ? html`<a class="btn ta-center" href=${dispute.dashboardUrl} target="_blank" rel="noopener">${dispute.open ? 'Answer in Stripe' : 'View in Stripe'} <k-icon name="open_in_new"></k-icon></a>` : nothing}
-        </td>
-      </tr>
-    `;
-  }
 
   render(){
     return html`
@@ -160,12 +157,9 @@ export default class DisputeList extends ShadowComponent {
       ${!this.loading && !this.error && !this.items.length ? html`<p class="tc-muted">${this.filter === 'open' ? 'No open disputes.' : 'No disputes to show.'}</p>` : nothing}
 
       ${this.items.length ? html`
-        <div class="table-wrapper">
-          <table>
-            <thead><tr><th>Due</th><th>Status</th><th>Amount</th><th>Why</th><th>Sale</th><th>Opened</th><th></th></tr></thead>
-            <tbody>${this.items.map(dispute => this.renderRow(dispute))}</tbody>
-          </table>
-        </div>
+        <k-table open-on-click placeholder="No disputes to show.">
+          <k-pay-dispute-stripe slot="after"></k-pay-dispute-stripe>
+        </k-table>
       ` : nothing}
     `;
   }

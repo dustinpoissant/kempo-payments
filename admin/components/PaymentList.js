@@ -1,6 +1,13 @@
 import ShadowComponent from '/kempo-ui/components/ShadowComponent.js';
 import '/kempo-ui/components/Icon.js';
 import '/kempo-ui/components/Spinner.js';
+import '/kempo-ui/components/Table.js';
+import '/kempo-ui/components/controls/TcFirstPage.js';
+import '/kempo-ui/components/controls/TcPrevPage.js';
+import '/kempo-ui/components/controls/TcNextPage.js';
+import '/kempo-ui/components/controls/TcLastPage.js';
+import '/kempo-ui/components/controls/TcPageSelect.js';
+import '/kempo-ui/components/controls/TcPageSize.js';
 import '/admin/extension/kempo-payments/components/PaymentDetail.js';
 import { html, css } from '/kempo-ui/lit-all.min.js';
 import { listPayments, getSummary } from '/payments/sdk.js';
@@ -13,7 +20,7 @@ import { formatAmount, statusLabel, statusTone } from '/payments/utils/money.js'
   open a payment is something that just happened to it — a refund to issue, an authorisation to
   capture — and coming back to a list that has not noticed is how somebody refunds the same payment
   twice. Selecting is local state, so going back is instant and the filters are exactly as they
-  were left.
+  were left. Clicking a row opens its payment.
 */
 
 const FILTERS = [
@@ -26,11 +33,22 @@ const FILTERS = [
 
 const PAGE_SIZE = 25;
 
+const fields = [
+  {
+    name: 'amount', label: 'Amount', size: 220, editable: false,
+    calculator: payment => `${formatAmount(payment.amount, payment.currency)}${payment.amountRefunded ? ` (−${formatAmount(payment.amountRefunded, payment.currency)} refunded)` : ''}`,
+  },
+  {
+    name: 'status', label: 'Status', size: 220, editable: false,
+    calculator: payment => `${statusLabel(payment.status)}${payment.disputed ? ' · Disputed' : ''}${payment.livemode ? '' : ' · Test'}`,
+  },
+  { name: 'description', label: 'For', editable: false, calculator: payment => payment.description || payment.reference || '—' },
+  { name: 'createdAt', label: 'Started', size: 190, editable: false, formatter: value => new Date(value).toLocaleString() },
+];
+
 export default class PaymentList extends ShadowComponent {
   static properties = {
-    payments: { type: Array, state: true },
     total: { type: Number, state: true },
-    offset: { type: Number, state: true },
     filter: { type: String, state: true },
     summary: { type: Object, state: true },
     selected: { type: String, state: true },
@@ -40,9 +58,7 @@ export default class PaymentList extends ShadowComponent {
 
   constructor(){
     super();
-    this.payments = [];
     this.total = 0;
-    this.offset = 0;
     this.filter = '';
     this.summary = null;
     this.selected = new URLSearchParams(location.search).get('payment') ?? '';
@@ -68,15 +84,16 @@ const pane = this.closest('k-tab-content');
     Data
   */
 
+  /* The filter as the API takes it. */
+  query = () => ({ status: this.filter || undefined });
+
   load = async () => {
+    await this.updateComplete;
+    const $table = this.renderRoot.querySelector('k-table');
     this.loading = true;
     this.error = '';
 
-    const [error, data] = await listPayments({
-      status: this.filter || undefined,
-      limit: PAGE_SIZE,
-      offset: this.offset,
-    });
+    const [error, data] = await listPayments({ ...this.query(), limit: PAGE_SIZE, offset: 0 });
 
     this.loading = false;
 
@@ -85,8 +102,12 @@ const pane = this.closest('k-tab-content');
       return;
     }
 
-    this.payments = data.payments;
     this.total = data.total;
+    $table?.setData({ records: data.payments, fields });
+    $table?.setupFetchRecords(data.total, async (start, count) => {
+      const [fetchError, page] = await listPayments({ ...this.query(), limit: count, offset: start });
+      return fetchError ? [] : page.payments;
+    });
 
     const [, summary] = await getSummary();
     this.summary = summary || null;
@@ -101,12 +122,18 @@ const pane = this.closest('k-tab-content');
 
   changeFilter = event => {
     this.filter = event.target.value;
-    this.offset = 0;
     this.load();
   };
 
-  page = delta => {
-    this.offset = Math.max(0, this.offset + delta * PAGE_SIZE);
+  /* A click anywhere on a row opens that payment. */
+  rowClicked = event => {
+    const row = event.composedPath().find(node => node.classList?.contains?.('record'));
+    const payment = row ? event.currentTarget.records[row.dataset.index] : null;
+    if(payment) this.selected = payment.id;
+  };
+
+  back = () => {
+    this.selected = '';
     this.load();
   };
 
@@ -167,58 +194,10 @@ const pane = this.closest('k-tab-content');
     `;
   }
 
-  #renderTable(){
-    if(this.loading && !this.payments.length) return html`<k-spinner></k-spinner>`;
-
-    if(!this.payments.length){
-      return html`
-        <p class="tc-muted">
-          ${this.filter ? 'No payments match that filter.' : 'No payments yet. Take one from the “Take a payment” tab to check the connection end to end.'}
-        </p>
-      `;
-    }
-
-    return html`
-      <div class="table-wrapper">
-        <table>
-          <thead>
-            <tr><th>Amount</th><th>Status</th><th>For</th><th>Started</th><th></th></tr>
-          </thead>
-          <tbody>
-            ${this.payments.map(payment => html`
-              <tr @click=${() => { this.selected = payment.id; }}>
-                <td>
-                  ${formatAmount(payment.amount, payment.currency)}
-                  ${payment.amountRefunded ? html`<span class="small tc-muted d-b">−${formatAmount(payment.amountRefunded, payment.currency)} refunded</span>` : ''}
-                </td>
-                <td>
-                  <span class="tc-${statusTone(payment.status)}">${statusLabel(payment.status)}</span>
-                  ${payment.disputed ? html`<span class="small tc-danger d-b">Disputed</span>` : ''}
-                  ${payment.livemode ? '' : html`<span class="small tc-muted d-b">Test</span>`}
-                </td>
-                <td class="small">${payment.description || payment.reference || '—'}</td>
-                <td class="small tc-muted">${new Date(payment.createdAt).toLocaleString()}</td>
-                <td class="small"><button class="link">Open</button></td>
-              </tr>
-            `)}
-          </tbody>
-        </table>
-      </div>
-
-      ${this.total > PAGE_SIZE ? html`
-        <div class="pager d-f">
-          <button ?disabled=${this.offset === 0} @click=${() => this.page(-1)}>Newer</button>
-          <span class="small tc-muted">${this.offset + 1}–${Math.min(this.offset + PAGE_SIZE, this.total)} of ${this.total}</span>
-          <button ?disabled=${this.offset + PAGE_SIZE >= this.total} @click=${() => this.page(1)}>Older</button>
-        </div>
-      ` : ''}
-    `;
-  }
-
   render(){
     if(this.selected){
       return html`
-        <button class="link mb" @click=${() => { this.selected = ''; this.load(); }}>
+        <button class="link mb" @click=${this.back}>
           <k-icon name="arrow" direction="left"></k-icon> All payments
         </button>
         <k-pay-detail payment-id=${this.selected} @changed=${this.refresh}></k-pay-detail>
@@ -238,7 +217,20 @@ const pane = this.closest('k-tab-content');
 
       ${this.error ? html`<p class="tc-danger">${this.error}</p>` : ''}
 
-      ${this.#renderTable()}
+      <k-table enable-pages page-size="25" page-size-options="[10,25,50]" placeholder=${this.filter ? 'No payments match that filter.' : 'No payments yet. Take one from the “Take a payment” tab to check the connection end to end.'} @click=${this.rowClicked}>
+        <div class="d-f full" style="align-items: center;">
+          <div>
+            <kc-tc-first-page></kc-tc-first-page>
+            <kc-tc-prev-page></kc-tc-prev-page>
+            <kc-tc-next-page></kc-tc-next-page>
+            <kc-tc-last-page></kc-tc-last-page>
+          </div>
+          <div class="flex"></div>
+          <div><kc-tc-page-select></kc-tc-page-select></div>
+          <div class="flex"></div>
+          <div><kc-tc-page-size></kc-tc-page-size></div>
+        </div>
+      </k-table>
     `;
   }
 
@@ -250,16 +242,7 @@ const pane = this.closest('k-tab-content');
     .controls { align-items: center; margin-bottom: var(--spacer); }
     .controls > * { margin-right: var(--spacer_h); }
     .controls select { margin-bottom: 0; max-width: 18rem; }
-    /*
-      Styled by element rather than a class, after a class named "row" turned every table row into
-      a flex container: kempo-css owns .row as its 12-column grid, so display:flex landed on the
-      tr and detached the body cells from the header entirely. Nothing on a table element should
-      carry a layout class from a framework that also lays out grids.
-    */
-    tbody tr { cursor: pointer; }
-    tbody tr:hover { background: var(--c_bg__alt); }
-    .pager { align-items: center; justify-content: flex-start; }
-    .pager > * { margin-right: var(--spacer_h); }
+    k-table { cursor: pointer; }
   `;
 }
 
