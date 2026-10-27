@@ -10,6 +10,8 @@ All notable changes to `kempo-payments` are documented in this file.
 
 ### Added
 
+- The Payments admin page has a `payments-admin-tabs` location after its tabs, so an extension can add a tab there.
+
 - **Saved cards, opt-in, for signed-in customers.** A signed-in account's payments carry a Stripe customer (made on first use, kept in the new `kempoPaymentCustomer` table, one per test/live mode). `<k-pay-form>` shows a "Save this card for next time" box (off until ticked), then offers "Pay with Visa ending 4242, expires 12/30" with the newest saved card chosen, "Use a different card", and a trash icon to forget one. A guest is told an account can save a card, with a link to create one (`signup-url`). New `GET /payments/api/saved-methods` and `DELETE /payments/api/saved-methods/:id` (own cards only, from the session), `getSavedMethods` / `removeSavedMethod` in the browser SDK, `listSavedCards` / `removeSavedCard` in the server SDK, `createCustomer` / `listSavedMethods` / `removeSavedMethod` on the provider contract, and a `save_cards` setting (a switch under Settings) that turns it off. Never on a connected account. The update creates the table.
 - **A Disputes page** (**Admin → Payments → Disputes**): the processor's chargebacks, open ones first with the soonest deadline at the top, each with its status, amount, the customer's reason in plain words, the sale it was about, and a button to answer it in Stripe. Read live from the processor, read-only (evidence is sent from the dashboard), behind `payments:view`. New `GET /payments/api/disputes`, `listDisputes` in the browser SDK, and `listDisputes` / `disputeUrl` on the provider contract.
 - A payment can be opened from a link: `/admin/extension/kempo-payments/?payment=<id>`.
@@ -17,6 +19,7 @@ All notable changes to `kempo-payments` are documented in this file.
 
 ### Changed
 
+- **Disputes is a tab on Payments** (`/admin/extension/kempo-payments/#disputes`) instead of its own page and menu entry. The page and its Disputes icon are removed, with no redirect. The tab needs `payments:view`, as the disputes API does. The Payments page's tabs use hash routing now, in place of the remembered tab (`persistent-id`).
 - **The Disputes menu icon ships with it** (`admin/icons/gavel.svg`), used by `icon-src`, instead of coming from kempo's shared set. The card glyph stays a name: the dashboard widget, which only takes icon names, uses it.
 - Its menu entry is in the new **Payments** group, first (priority 79), instead of Commerce.
 

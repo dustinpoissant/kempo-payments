@@ -2,6 +2,8 @@ import ShadowComponent from '/kempo-ui/components/ShadowComponent.js';
 import '/kempo-ui/components/Icon.js';
 import '/kempo-ui/components/Spinner.js';
 import '/kempo-ui/components/Table.js';
+import '/kempo-ui/components/controls/TcFilters.js';
+import '/kempo-ui/components/controls/TcFieldSortHide.js';
 import '/kempo-ui/components/controls/TcFirstPage.js';
 import '/kempo-ui/components/controls/TcPrevPage.js';
 import '/kempo-ui/components/controls/TcNextPage.js';
@@ -43,7 +45,7 @@ const fields = [
     calculator: payment => `${statusLabel(payment.status)}${payment.disputed ? ' · Disputed' : ''}${payment.livemode ? '' : ' · Test'}`,
   },
   { name: 'description', label: 'For', editable: false, calculator: payment => payment.description || payment.reference || '—' },
-  { name: 'createdAt', label: 'Started', size: 190, editable: false, formatter: value => new Date(value).toLocaleString() },
+  { name: 'createdAt', label: 'Started', size: 230, editable: false, formatter: value => new Date(value).toLocaleString() },
 ];
 
 export default class PaymentList extends ShadowComponent {
@@ -169,7 +171,7 @@ const pane = this.closest('k-tab-content');
           <div class="tile card">
             <span class="small tc-muted">Taken in ${currency.toUpperCase()}</span>
             <span class="value">${formatAmount(total.captured - total.refunded, currency)}</span>
-            <span class="small tc-muted">
+            <span class="d-b mb small tc-muted">
               ${total.count} payment${total.count === 1 ? '' : 's'}${total.refunded ? html` · ${formatAmount(total.refunded, currency)} refunded` : ''}
             </span>
           </div>
@@ -179,7 +181,7 @@ const pane = this.closest('k-tab-content');
           <div class="tile card">
             <span class="small tc-muted">Awaiting capture</span>
             <span class="value tc-warning">${awaiting}</span>
-            <span class="small tc-muted">Holds that expire if nobody captures them</span>
+            <span class="d-b mb small tc-muted">Holds that expire if nobody captures them</span>
           </div>
         ` : ''}
 
@@ -187,7 +189,7 @@ const pane = this.closest('k-tab-content');
           <div class="tile card">
             <span class="small tc-muted">Disputed</span>
             <span class="value tc-danger">${this.summary.disputed}</span>
-            <span class="small tc-muted">Answer these in the processor’s dashboard</span>
+            <span class="d-b mb small tc-muted">Answer these in the processor’s dashboard</span>
           </div>
         ` : ''}
       </div>
@@ -207,17 +209,11 @@ const pane = this.closest('k-tab-content');
     return html`
       ${this.#renderSummary()}
 
-      <div class="controls d-f">
-        <select .value=${this.filter} @change=${this.changeFilter}>
-          ${FILTERS.map(option => html`<option value=${option.value} ?selected=${option.value === this.filter}>${option.label}</option>`)}
-        </select>
-        <button class="secondary" @click=${this.load}><k-icon name="replay"></k-icon> Refresh</button>
-        ${this.loading ? html`<k-spinner></k-spinner>` : ''}
-      </div>
 
       ${this.error ? html`<p class="tc-danger">${this.error}</p>` : ''}
 
       <k-table enable-pages page-size="25" page-size-options="[10,25,50]" placeholder=${this.filter ? 'No payments match that filter.' : 'No payments yet. Take one from the “Take a payment” tab to check the connection end to end.'} @click=${this.rowClicked}>
+        <div slot="top" class="d-f full" style="align-items: center;"><kc-tc-filters></kc-tc-filters><kc-tc-field-sort-hide></kc-tc-field-sort-hide></div>
         <div class="d-f full" style="align-items: center;">
           <div>
             <kc-tc-first-page></kc-tc-first-page>

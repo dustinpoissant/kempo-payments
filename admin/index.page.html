@@ -6,6 +6,7 @@ locked: true
   <script type="module" src="/kempo/components/PermissionTarget.js"></script>
   <script type="module" src="/kempo-ui/components/Tabs.js"></script>
   <script type="module" src="/admin/extension/kempo-payments/components/PaymentList.js"></script>
+  <script type="module" src="/admin/extension/kempo-payments/components/DisputeList.js"></script>
   <script type="module" src="/admin/extension/kempo-payments/components/ProviderSettings.js"></script>
   <script type="module" src="/admin/extension/kempo-payments/components/TestPayment.js"></script>
 
@@ -17,13 +18,24 @@ locked: true
       what is kept is this site's record of what happened to the money.
     </p>
 
-    <k-tabs id="tabs" active="payments" persistent-id="kempo-payments-admin-tab">
+    <k-tabs id="tabs" active="payments" hash-routing>
       <k-tab id="paymentsTab" for="payments">Payments</k-tab>
+      <k-tab id="disputesTab" for="disputes">Disputes</k-tab>
       <k-tab id="testTab" for="test">Take a payment</k-tab>
       <k-tab id="settingsTab" for="settings">Settings</k-tab>
 
       <k-tab-content id="paymentsContent" name="payments">
         <k-pay-list></k-pay-list>
+      </k-tab-content>
+
+      <k-tab-content id="disputesContent" name="disputes">
+        <p class="tc-muted">
+          A dispute (a chargeback) is a customer asking their bank to take a payment back. The bank holds the money
+          while it decides, and you have until the due date to send your evidence. The evidence is sent from your
+          Stripe account, where the form and the deadline emails already are; this tab shows what is open, how long
+          is left and which sale each one is about, and takes you to the right one.
+        </p>
+        <k-pay-disputes></k-pay-disputes>
       </k-tab-content>
 
       <k-tab-content id="testContent" name="test">
@@ -33,6 +45,8 @@ locked: true
       <k-tab-content id="settingsContent" name="settings">
         <k-pay-settings></k-pay-settings>
       </k-tab-content>
+
+      <location name="payments-admin-tabs" />
     </k-tabs>
 
     <!--
@@ -46,6 +60,7 @@ locked: true
       on each route.
     -->
     <k-permission-target has="payments:view" target="#paymentsTab, #paymentsContent"></k-permission-target>
+    <k-permission-target has="payments:view" target="#disputesTab, #disputesContent"></k-permission-target>
     <k-permission-target has="payments:create" target="#testTab, #testContent"></k-permission-target>
     <k-permission-target has="payments:settings" target="#settingsTab, #settingsContent"></k-permission-target>
   </div>
@@ -56,8 +71,7 @@ locked: true
     await customElements.whenDefined('k-tabs');
 
     /*
-      The markup defaults to the Payments tab, and persistent-id can restore whichever tab a
-      returning visitor left open — including one this particular visitor cannot see, if their
+      The markup defaults to the Payments tab, and the hash can name a tab this visitor cannot see, if their
       permissions changed since. The k-permission-target elements above hide a tab's own button and
       pane; this handles never leaving a hidden one selected.
     */
@@ -68,6 +82,7 @@ locked: true
     if(tabs){
       const visibility = {
         payments: permissions.has('payments:view'),
+        disputes: permissions.has('payments:view'),
         test: permissions.has('payments:create'),
         settings: permissions.has('payments:settings'),
       };

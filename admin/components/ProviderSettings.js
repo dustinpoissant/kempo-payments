@@ -199,7 +199,7 @@ const pane = this.closest('k-tab-content');
 
     return html`
       <div class="card banner ${this.status.livemode ? 'tc-danger' : 'tc-success'}">
-        <strong>
+        <strong class="d-b mb">
           ${this.status.livemode
             ? 'Connected in live mode — payments taken here are real.'
             : 'Connected in test mode. No real money can move.'}

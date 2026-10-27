@@ -2,6 +2,8 @@ import ShadowComponent from '/kempo-ui/components/ShadowComponent.js';
 import '/kempo-ui/components/Icon.js';
 import '/kempo-ui/components/Spinner.js';
 import '/kempo-ui/components/Table.js';
+import '/kempo-ui/components/controls/TcFilters.js';
+import '/kempo-ui/components/controls/TcFieldSortHide.js';
 import './DisputeInStripe.js';
 import { html, nothing } from '/kempo-ui/lit-all.min.js';
 import { listDisputes } from '/payments/sdk.js';
@@ -99,7 +101,12 @@ export default class DisputeList extends ShadowComponent {
 
   connectedCallback(){
     super.connectedCallback();
-    this.load();
+    const pane = this.closest('k-tab-content');
+    // Loads when its tab is first opened, so a tab nobody opens makes no requests.
+    if(!pane || pane.active) this.load();
+    else this.closest('k-tabs')?.addEventListener('tabfirstshown', ({ detail }) => {
+      if(detail.tab === pane.name) this.load();
+    });
   }
 
   /*
@@ -109,7 +116,7 @@ export default class DisputeList extends ShadowComponent {
   load = async () => {
     this.loading = true;
     this.error = '';
-    const [error, data] = await listDisputes({ status: this.filter });
+    const [error, data] = await listDisputes({});
     this.loading = false;
     if(error){
       this.error = error.msg;
@@ -143,13 +150,6 @@ export default class DisputeList extends ShadowComponent {
 
   render(){
     return html`
-      <div class="d-f mb" style="align-items: center; gap: var(--spacer_h);">
-        <select .value=${this.filter} @change=${this.changeFilter} style="max-width: 12rem;">
-          ${FILTERS.map(option => html`<option value=${option.value} ?selected=${option.value === this.filter}>${option.label}</option>`)}
-        </select>
-        <button class="secondary" @click=${this.load}><k-icon name="replay"></k-icon> Refresh</button>
-        ${this.loading ? html`<k-spinner></k-spinner>` : nothing}
-      </div>
 
       ${this.error ? html`<p class="tc-danger" role="alert">${this.error}</p>` : nothing}
       ${this.openCount ? html`<p class="tc-danger"><strong>${this.openCount}</strong> ${this.openCount === 1 ? 'dispute needs' : 'disputes need'} attention. Answer before the due date or the bank rules against you.</p>` : nothing}
@@ -158,6 +158,7 @@ export default class DisputeList extends ShadowComponent {
 
       ${this.items.length ? html`
         <k-table open-on-click placeholder="No disputes to show.">
+          <div slot="top" class="d-f full" style="align-items: center;"><kc-tc-filters></kc-tc-filters><kc-tc-field-sort-hide></kc-tc-field-sort-hide></div>
           <k-pay-dispute-stripe slot="after"></k-pay-dispute-stripe>
         </k-table>
       ` : nothing}

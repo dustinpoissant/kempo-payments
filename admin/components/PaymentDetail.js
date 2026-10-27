@@ -216,7 +216,7 @@ export default class PaymentDetail extends ShadowComponent {
             <label class="checkbox mb">
               <input type="checkbox" .checked=${this.refundFee} @change=${event => { this.refundFee = event.target.checked; }} />
               Give back the site’s fee too
-              <small class="d-b tc-muted">This payment went to a connected account and the site kept ${formatAmount(payment.applicationFee, payment.currency)}. Ticked, that fee is returned in proportion to the refund; unticked, the account pays the whole refund and the site keeps its fee.</small>
+              <small class="d-b tc-muted">This payment went to a connected account and the site kept ${formatAmount(payment.applicationFee, payment.currency)}. If selected, that fee is returned in proportion to the refund; if not, the account pays the whole refund and the site keeps its fee.</small>
             </label>
           ` : ''}
 
