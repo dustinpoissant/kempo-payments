@@ -19,6 +19,9 @@ All notable changes to `kempo-payments` are documented in this file.
 
 ### Changed
 
+- The `kempo-ui` peer dependency is now `>=1.0.0`.
+- The `kempo` peer dependency is now `>=4.10.2`.
+
 - **Disputes is a tab on Payments** (`/admin/extension/kempo-payments/#disputes`) instead of its own page and menu entry. The page and its Disputes icon are removed, with no redirect. The tab needs `payments:view`, as the disputes API does. The Payments page's tabs use hash routing now, in place of the remembered tab (`persistent-id`).
 - **The Disputes menu icon ships with it** (`admin/icons/gavel.svg`), used by `icon-src`, instead of coming from kempo's shared set. The card glyph stays a name: the dashboard widget, which only takes icon names, uses it.
 - Its menu entry is in the new **Payments** group, first (priority 79), instead of Commerce.
